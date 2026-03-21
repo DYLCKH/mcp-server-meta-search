@@ -306,15 +306,26 @@ function stringifyForToolContent(value) {
 
 class HttpProviderError extends Error {
   constructor(provider, status, body) {
-    const bodyText =
-      typeof body === "string" && body.trim()
-        ? body.trim().slice(0, 600)
-        : "No error payload returned by provider";
-    super(`${provider} API request failed (${status}): ${bodyText}`);
+    super(HttpProviderError.briefMessage(provider, status));
     this.name = "HttpProviderError";
     this.provider = provider;
     this.status = status;
     this.body = body;
+  }
+
+  /** Return a short, agent-friendly error message based on HTTP status. */
+  static briefMessage(provider, status) {
+    switch (status) {
+      case 401: return `${provider}: invalid API key. Replace or remove it.`;
+      case 402: return `${provider}: payment required — billing issue or quota exceeded.`;
+      case 403: return `${provider}: access denied. Check token permissions.`;
+      case 429: return `${provider}: rate limited. Try again later.`;
+      case 408: return `${provider}: request timed out. Try again.`;
+      case 500: case 502: case 503: case 504:
+        return `${provider}: service temporarily unavailable (${status}). Try again later.`;
+      default:
+        return `${provider}: request failed (HTTP ${status}).`;
+    }
   }
 }
 
@@ -567,8 +578,7 @@ async function callWithKeyRotation({
 }) {
   if (!keyPool.hasKeys()) {
     throw new Error(
-      `${providerName} API keys are missing. ` +
-      `Configure them in config.jsonc or via environment variables.`,
+      `${providerName}: no API keys configured. Add keys to config.jsonc.`,
     );
   }
 
@@ -615,12 +625,24 @@ async function callWithKeyRotation({
       }
 
       if (!isRetryableError(error) || attempt >= attemptLimit) {
+        // If all active keys are now gone, give a clear message
+        if (!keyPool.hasActiveKeys()) {
+          throw new Error(
+            `${providerName}: all API keys exhausted. Add new keys to config.jsonc.`,
+          );
+        }
         throw error;
       }
     }
   }
 
-  throw lastError ?? new Error(`${providerName} request failed`);
+  // Fallback — all attempts consumed
+  if (!keyPool.hasActiveKeys()) {
+    throw new Error(
+      `${providerName}: all API keys exhausted. Add new keys to config.jsonc.`,
+    );
+  }
+  throw lastError ?? new Error(`${providerName}: request failed after ${attemptLimit} attempt(s).`);
 }
 
 function normalizeResults(results) {
@@ -970,10 +992,10 @@ server.registerTool(
   {
     title: "Fetch as Markdown (Cloudflare Browser Rendering)",
     description:
-      "Fetches a URL via Cloudflare Browser Rendering and converts its content to Markdown. " +
-      "Required parameter: 'url' (the webpage URL to convert). " +
+      "Fetches a URL via Cloudflare Browser Rendering and converts to Markdown. " +
+      "NOT the first choice — prefer other fetch tools when available; use this only when they fail or when JS rendering is required. " +
       "Supports JavaScript-rendered pages (SPAs) via gotoOptions/waitForSelector. " +
-      "Automatically rotates Cloudflare account credentials on auth failure, rate-limiting, or transient errors.",
+      "Required parameter: 'url'.",
     inputSchema: {
       url: z
         .string()
@@ -1132,9 +1154,7 @@ server.registerTool(
   async (input) => {
     if (!cfKeyPool.hasKeys()) {
       throw new Error(
-        "Cloudflare credentials are missing. " +
-          "Configure cloudflare.accounts in config.jsonc " +
-          "or via CLOUDFLARE__ACCOUNTS environment variable.",
+        "cloudflare: no credentials configured. Add accounts to config.jsonc.",
       );
     }
 
