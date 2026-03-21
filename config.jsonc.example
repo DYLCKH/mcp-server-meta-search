@@ -1,0 +1,62 @@
+{
+  // === Provider API Keys ===
+
+  // Tavily (https://tavily.com)
+  "tavily": {
+    "api_keys": ["tvly-xxxxx"],
+    "base_url": "https://api.tavily.com"
+  },
+
+  // Exa (https://exa.ai)
+  "exa": {
+    "api_keys": ["exa-xxxxx"],
+    "base_url": "https://api.exa.ai"
+  },
+
+  // Perplexity (https://perplexity.ai)
+  "perplexity": {
+    "api_keys": ["pplx-xxxxx"],
+    "base_url": "https://api.perplexity.ai"
+  },
+
+  // Cloudflare Browser Rendering (for fetch_as_markdown)
+  // Each object pairs an account_id with its api_token.
+  //
+  // Required API Token permissions:
+  //   Scope:      Account
+  //   Resource:   Browser Rendering
+  //   Permission: Edit          ← "Read" will NOT work (returns 401)
+  //
+  // Create at: https://dash.cloudflare.com/profile/api-tokens
+  //   → "Create Custom Token" → Account / Browser Rendering / Edit
+  "cloudflare": {
+    "accounts": [
+      { "account_id": "your-cf-account-id", "api_token": "your-cf-api-token" }
+    ],
+    "base_url": "https://api.cloudflare.com/client/v4"
+  },
+
+  // === Global Settings ===
+
+  // Key rotation strategy: "round_robin" (default) or "random"
+  "key_rotation_strategy": "round_robin",
+
+  // Max retry attempts per request (0 = auto, uses pool size)
+  "max_attempts_per_request": 0,
+
+  // Request timeout in milliseconds
+  "request_timeout_ms": 30000,
+
+  // === Key Health Tracking ===
+
+  // Time (ms) before a disabled key is re-enabled for retry (default: 300000 = 5 min)
+  "key_recovery_interval_ms": 300000,
+
+  // Cumulative disable count before a key is permanently revoked (default: 3)
+  // When a key is disabled and recovered multiple times, hitting this threshold
+  // moves it to invalid-keys.json and permanently removes it from the pool.
+  "max_disable_before_revoke": 3,
+
+  // File path for recording revoked keys (relative to script directory)
+  "invalid_keys_file": "invalid-keys.json"
+}

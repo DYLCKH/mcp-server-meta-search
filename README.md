@@ -1,109 +1,188 @@
-# MCP Search Rotator
+# Web Search MCP Server
 
-An MCP (Model Context Protocol) server providing three search tools — Tavily, Exa, and Perplexity — with automatic API key rotation. Supports multiple API keys per provider and retries with the next key on auth failures, rate limiting, or transient errors.
+An MCP (Model Context Protocol) server providing web search and page fetching tools with automatic API key rotation and key health tracking.
+
+## Tools
+
+| Tool | Provider | Description |
+|------|----------|-------------|
+| `search_tavily` | [Tavily](https://tavily.com/) | General-purpose web search with AI answer generation |
+| `search_exa` | [Exa](https://exa.ai/) | AI-native search with neural, keyword, and hybrid modes |
+| `search_perplexity` | [Perplexity](https://www.perplexity.ai/) | Lightweight structured web search |
+| `fetch_as_markdown` | [Cloudflare Browser Rendering](https://developers.cloudflare.com/browser-rendering/) | Fetches a URL and converts to Markdown (supports JS-rendered SPAs) |
 
 ## Quick Start
 
 ```bash
-node mcp-search-rotator.mjs
+node web-search.mjs
 ```
 
-**OpenCode configuration example:**
+OpenCode configuration:
 
-```json
+```jsonc
 {
   "mcp": {
-    "search-rotator": {
+    "web-search": {
       "type": "local",
-      "command": ["node", "/path/to/mcp-search-rotator.mjs"]
+      "command": ["node", "/path/to/web-search.mjs"]
     }
   }
 }
 ```
 
-## Requirements
+## Configuration
 
-- Node.js (ESM support required)
-- Dependencies: `@modelcontextprotocol/sdk`, `zod`, `undici`
+The server uses **JSONC** (`config.jsonc`) as its primary configuration format, with environment variable overrides.
 
-## Tools
+### Config Resolution Order
+
+1. Load `config.jsonc` (if exists)
+2. If `config.jsonc` does not exist but `.env` does → auto-migrate to `config.jsonc`
+3. Apply environment variable overrides (double-underscore nesting, e.g. `TAVILY__API_KEYS`)
+4. Environment variables always take priority over file values
+
+See [`config.jsonc.example`](config.jsonc.example) for all available fields.
+
+### Environment Variable Overrides
+
+Environment variables map to config fields using double-underscore (`__`) as the nesting separator:
+
+| Env Var | Config Field |
+|---------|-------------|
+| `TAVILY__API_KEYS` | `tavily.api_keys` |
+| `CLOUDFLARE__ACCOUNTS` | `cloudflare.accounts` |
+| `KEY_ROTATION_STRATEGY` | `key_rotation_strategy` |
+
+Values are parsed as JSON when possible (supports arrays and objects), otherwise kept as strings.
+
+### Legacy `.env` Format
+
+The `.env` format is **deprecated**. If `config.jsonc` does not exist, the server will auto-migrate `.env` on first startup. See [`.example`](.example) for the legacy format reference.
+
+## Tool Reference
 
 ### `search_tavily`
-
-General-purpose web search via [Tavily](https://tavily.com/).
 
 **Endpoint:** `POST https://api.tavily.com/search`
 
 | Parameter | Type | Default | Description |
-|---|---|---|---|
+|-----------|------|---------|-------------|
 | `query` | string | *(required)* | Search query |
 | `max_results` | integer | `5` | Number of results (1–20) |
-| `search_depth` | enum | — | `basic`, `advanced`, `fast`, or `ultra-fast` |
-| `topic` | enum | — | `general`, `news`, or `finance` |
-| `time_range` | enum | — | `day`, `week`, `month`, or `year` |
-| `include_domains` | string[] | — | Restrict results to these domains |
-| `exclude_domains` | string[] | — | Exclude results from these domains |
-| `include_answer` | boolean \| string | — | `true`/`"basic"` for quick answer, `"advanced"` for detailed |
-| `include_raw_content` | boolean \| string | — | `true`/`"markdown"` for markdown, `"text"` for plain text |
-| `include_images` | boolean | — | Include image search results |
-| `include_image_descriptions` | boolean | — | Add descriptions to images (requires `include_images`) |
+| `search_depth` | enum | — | `basic` \| `advanced` \| `fast` \| `ultra-fast` |
+| `topic` | enum | — | `general` \| `news` \| `finance` |
+| `time_range` | enum | — | `day` \| `week` \| `month` \| `year` |
+| `include_domains` | string[] | — | Restrict to these domains (max 300) |
+| `exclude_domains` | string[] | — | Exclude these domains (max 150) |
+| `include_answer` | bool \| string | — | `true` / `"basic"` / `"advanced"` |
+| `include_raw_content` | bool \| string | — | `true` / `"markdown"` / `"text"` |
+| `include_images` | boolean | — | Include image results |
+| `include_image_descriptions` | boolean | — | Add descriptions to images |
 | `include_favicon` | boolean | — | Include favicon URL per result |
-| `auto_parameters` | boolean | — | Let Tavily auto-configure parameters based on query intent |
-| `include_usage` | boolean | — | Include credit usage info in response |
+| `auto_parameters` | boolean | — | Let Tavily auto-configure based on query intent |
+| `include_usage` | boolean | — | Include credit usage info |
 
 ### `search_exa`
-
-AI-native search via [Exa](https://exa.ai/) with neural, keyword, and hybrid modes.
 
 **Endpoint:** `POST https://api.exa.ai/search`
 
 | Parameter | Type | Default | Description |
-|---|---|---|---|
+|-----------|------|---------|-------------|
 | `query` | string | *(required)* | Search query |
 | `num_results` | integer | `10` | Number of results (1–100) |
-| `type` | enum | — | `neural`, `fast`, `auto`, `deep`, or `instant` |
-| `category` | enum | — | `company`, `research paper`, `news`, `tweet`, `personal site`, `financial report`, or `people` |
+| `type` | enum | — | `neural` \| `fast` \| `auto` \| `deep` \| `instant` |
+| `category` | enum | — | `company` \| `research paper` \| `news` \| `tweet` \| `personal site` \| `financial report` \| `people` |
 | `user_location` | string | — | Two-letter ISO country code |
-| `include_domains` | string[] | — | Restrict results to these domains |
-| `exclude_domains` | string[] | — | Exclude results from these domains |
-| `start_crawl_date` | string | — | ISO 8601 date; only results crawled after this |
-| `end_crawl_date` | string | — | ISO 8601 date; only results crawled before this |
-| `start_published_date` | string | — | ISO 8601 date; only results published after this |
-| `end_published_date` | string | — | ISO 8601 date; only results published before this |
-| `include_text` | boolean | — | Return full page text content |
-| `include_highlights` | boolean | — | Return relevant text snippets |
+| `include_domains` | string[] | — | Restrict to these domains (max 1200) |
+| `exclude_domains` | string[] | — | Exclude these domains (max 1200) |
+| `start_published_date` | string | — | ISO 8601; only results published after this |
+| `end_published_date` | string | — | ISO 8601; only results published before this |
+| `start_crawl_date` | string | — | ISO 8601; only results crawled after this |
+| `end_crawl_date` | string | — | ISO 8601; only results crawled before this |
+| `include_text` | boolean | — | Return full page text |
+| `include_highlights` | boolean | — | Return relevant snippets |
 | `include_summary` | boolean | — | Return LLM-generated summary per result |
 | `summary_query` | string | — | Custom query to direct summary generation |
-| `max_age_hours` | integer | — | Max cache age in hours (`0` = always livecrawl, `-1` = always cache) |
+| `max_age_hours` | integer | — | Max cache age in hours |
 
 ### `search_perplexity`
-
-Lightweight structured web search via [Perplexity](https://www.perplexity.ai/) (uses the search endpoint, not chat/completions).
 
 **Endpoint:** `POST https://api.perplexity.ai/search`
 
 | Parameter | Type | Default | Description |
-|---|---|---|---|
+|-----------|------|---------|-------------|
 | `query` | string | *(required)* | Search query |
 | `max_results` | integer | `10` | Number of results (1–20) |
-| `max_tokens_per_page` | integer | `1024` | Max tokens of content per result page (256–2048) |
-| `country` | string | — | ISO 3166-1 alpha-2 country code to bias results |
+| `max_tokens_per_page` | integer | `1024` | Max tokens per result page (256–2048) |
+| `country` | string | — | ISO 3166-1 alpha-2 country code |
 
-## API Key Rotation
+### `fetch_as_markdown`
 
-Supply one or more API keys per provider via environment variables:
+**Endpoint:** `POST https://api.cloudflare.com/client/v4/accounts/{account_id}/browser-rendering/markdown`
 
-| Provider | Single Key | Multiple Keys (comma-separated) |
-|---|---|---|
-| Tavily | `TAVILY_API_KEY` | `TAVILY_API_KEYS` |
-| Exa | `EXA_API_KEY` | `EXA_API_KEYS` |
-| Perplexity | `PERPLEXITY_API_KEY` | `PERPLEXITY_API_KEYS` |
+Converts a URL to Markdown using Cloudflare's headless browser. Supports JavaScript-rendered pages (SPAs) via `gotoOptions` and `waitForSelector`.
 
-**Rotation behavior:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `url` | string | *(required)* | URL to fetch |
+| `html` | string | — | Raw HTML to convert (alternative to `url`) |
+| `cacheTTL` | integer | `5` | Cache TTL in seconds (0–86400, sent as query param) |
+| `gotoOptions` | object | — | `{waitUntil, timeout}` — navigation options |
+| `waitForSelector` | object | — | `{selector, visible, hidden, timeout}` — wait for element |
+| `cookies` | object[] | — | Cookies to set before navigation |
+| `authenticate` | object | — | `{username, password}` — HTTP Basic Auth |
+| `setExtraHTTPHeaders` | object | — | Custom HTTP headers |
+| `viewport` | object | — | `{width, height, deviceScaleFactor}` |
+| `userAgent` | string | — | Custom User-Agent |
+| `rejectRequestPattern` | string[] | — | URL patterns to block |
+| `rejectResourceTypes` | string[] | — | Resource types to block |
+| `allowRequestPattern` | string[] | — | URL patterns to allow |
+| `allowResourceTypes` | string[] | — | Resource types to allow |
+| `addScriptTag` | object[] | — | JS to inject before rendering |
+| `addStyleTag` | object[] | — | CSS to inject before rendering |
+| `setJavaScriptEnabled` | boolean | `true` | Enable/disable JavaScript |
 
-- **Strategy:** Round-robin by default. Set `SEARCH_KEY_ROTATION_STRATEGY=random` for random selection.
-- **Retry triggers:** HTTP 401, 402, 403, 408, 409, 425, 429, 432, 433, 500, 502, 503, 504, and network timeouts.
-- **Attempt limit:** `SEARCH_MAX_ATTEMPTS_PER_REQUEST` — `0` (default) tries each key once; a positive value caps the total attempts.
+> **Cloudflare API Token requirement:** The token must have **Account / Browser Rendering / Edit** permission. A "Read" permission will result in 401 errors. Create tokens at [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens).
+
+## Key Rotation & Health Tracking
+
+### Rotation
+
+Each provider supports multiple API keys. Keys are rotated automatically on failure.
+
+- **Strategy:** `round_robin` (default) or `random`
+- **Retry triggers:** HTTP 401, 402, 403, 408, 409, 425, 429, 432, 433, 500, 502, 503, 504, network timeouts, and connection errors
+
+### Key Health State Machine
+
+Keys are tracked with a health state:
+
+```
+active ──(auth error 401/402/403)──→ disabled ──(recovery timeout)──→ active
+                                         │
+                                  (disable count ≥ max)
+                                         │
+                                         ▼
+                                      revoked  →  written to invalid-keys.json
+```
+
+- **`active`** — key is available for use
+- **`disabled`** — temporarily removed after auth error; automatically re-enabled after `key_recovery_interval_ms` (default: 5 minutes)
+- **`revoked`** — permanently removed after `max_disable_before_revoke` (default: 3) cumulative failures; recorded to `invalid-keys.json` with masked key values
+
+### Startup Summary
+
+On startup, the server outputs a summary to stderr:
+
+```
+[web-search] Starting up...
+[web-search]   Tavily: 13 key(s)
+[web-search]   Exa: 16 key(s)
+[web-search]   Perplexity: 9 key(s)
+[web-search]   Cloudflare: 1 key(s)
+[web-search]   Strategy: round_robin | Timeout: 30000ms | Recovery: 300000ms | Max disable: 3
+[web-search] Ready.
+```
 
 ## Proxy Support
 
@@ -112,20 +191,26 @@ The server reads standard proxy environment variables and routes all requests th
 - `https_proxy` / `HTTPS_PROXY`
 - `http_proxy` / `HTTP_PROXY`
 
-This is useful when certain API endpoints (e.g., Perplexity on Meta infrastructure) are not directly reachable.
+## Configuration Reference
 
-## Environment Variables
+| Field | Env Override | Default | Description |
+|-------|-------------|---------|-------------|
+| `tavily.api_keys` | `TAVILY__API_KEYS` | — | Tavily API key(s) |
+| `tavily.base_url` | `TAVILY__BASE_URL` | `https://api.tavily.com` | Tavily API base URL |
+| `exa.api_keys` | `EXA__API_KEYS` | — | Exa API key(s) |
+| `exa.base_url` | `EXA__BASE_URL` | `https://api.exa.ai` | Exa API base URL |
+| `perplexity.api_keys` | `PERPLEXITY__API_KEYS` | — | Perplexity API key(s) |
+| `perplexity.base_url` | `PERPLEXITY__BASE_URL` | `https://api.perplexity.ai` | Perplexity API base URL |
+| `cloudflare.accounts` | `CLOUDFLARE__ACCOUNTS` | — | `[{account_id, api_token}]` pairs |
+| `cloudflare.base_url` | `CLOUDFLARE__BASE_URL` | `https://api.cloudflare.com/client/v4` | Cloudflare API base URL |
+| `key_rotation_strategy` | `KEY_ROTATION_STRATEGY` | `round_robin` | `round_robin` or `random` |
+| `max_attempts_per_request` | `MAX_ATTEMPTS_PER_REQUEST` | `0` | Max retries (`0` = try each key once) |
+| `request_timeout_ms` | `REQUEST_TIMEOUT_MS` | `30000` | Request timeout in ms |
+| `key_recovery_interval_ms` | `KEY_RECOVERY_INTERVAL_MS` | `300000` | Time before disabled key retries |
+| `max_disable_before_revoke` | `MAX_DISABLE_BEFORE_REVOKE` | `3` | Failures before permanent revocation |
+| `invalid_keys_file` | `INVALID_KEYS_FILE` | `invalid-keys.json` | File path for revoked keys |
 
-| Variable | Default | Description |
-|---|---|---|
-| `TAVILY_API_KEY` / `TAVILY_API_KEYS` | — | Tavily API key(s) |
-| `EXA_API_KEY` / `EXA_API_KEYS` | — | Exa API key(s) |
-| `PERPLEXITY_API_KEY` / `PERPLEXITY_API_KEYS` | — | Perplexity API key(s) |
-| `SEARCH_KEY_ROTATION_STRATEGY` | `round_robin` | Key rotation strategy (`round_robin` or `random`) |
-| `SEARCH_MAX_ATTEMPTS_PER_REQUEST` | `0` | Max retry attempts per request (`0` = try all keys once) |
-| `SEARCH_REQUEST_TIMEOUT_MS` | `30000` | Request timeout in milliseconds |
-| `TAVILY_BASE_URL` | `https://api.tavily.com` | Override Tavily API base URL |
-| `EXA_BASE_URL` | `https://api.exa.ai` | Override Exa API base URL |
-| `PERPLEXITY_BASE_URL` | `https://api.perplexity.ai` | Override Perplexity API base URL |
+## Requirements
 
-Configuration is loaded from a `.env` file in the same directory as the script, or from system environment variables. `.env` values do **not** override existing environment variables.
+- Node.js (ESM support required)
+- Dependencies: `@modelcontextprotocol/sdk`, `zod`, `undici`
