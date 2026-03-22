@@ -714,7 +714,7 @@ server.registerTool(
   {
     title: "Tavily Search (Key Rotation)",
     description:
-      "Execute a web search via Tavily; automatically rotates API keys on auth failure, rate-limiting, or transient errors.",
+      "Perform web search via Tavily. Best for general search with structured output and built-in answer generation.",
     inputSchema: {
       query: z.string().min(1).describe("The search query to execute with Tavily."),
       max_results: z.preprocess(coerceInt, z.number().int().min(1).max(20).optional()).describe("The maximum number of search results to return (1-20, default 5)."),
@@ -816,7 +816,7 @@ server.registerTool(
   {
     title: "Exa Search (Key Rotation)",
     description:
-      "Perform web search via Exa; automatically rotates API keys on auth failure, rate limiting, or transient errors.",
+      "Perform web search via Exa. Best for semantic search, finding similar content, people/company lookups, and research papers.",
     inputSchema: {
       query: z.string().min(1).describe("The query string for the search"),
       num_results: z.preprocess(coerceInt, z.number().int().min(1).max(100).optional()).describe("Number of results to return (1-100, default 10)"),
@@ -929,7 +929,7 @@ server.registerTool(
   {
     title: "Perplexity Search (Key Rotation)",
     description:
-      "Perform web search via Perplexity; automatically rotates API keys on auth failure, rate-limiting, or transient errors.",
+      "Perform web search via Perplexity. Best for AI-synthesized answers with inline citations and high factuality.",
     inputSchema: {
       query: z.string().min(1).describe("The search query to execute with Perplexity."),
       max_results: z.preprocess(coerceInt, z.number().int().min(1).max(20).optional()).describe("The maximum number of search results to return (1-20, default 10)."),
@@ -993,9 +993,7 @@ server.registerTool(
     title: "Fetch as Markdown (Cloudflare Browser Rendering)",
     description:
       "Fetches a URL via Cloudflare Browser Rendering and converts to Markdown. " +
-      "NOT the first choice — prefer other fetch tools when available; use this only when they fail or when JS rendering is required. " +
-      "Supports JavaScript-rendered pages (SPAs) via gotoOptions/waitForSelector. " +
-      "Required parameter: 'url'.",
+      "NOT the first choice — prefer other fetch tools; use only when they fail or JS rendering is required.",
     inputSchema: {
       url: z
         .string()
