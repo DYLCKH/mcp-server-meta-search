@@ -9,7 +9,8 @@ An MCP (Model Context Protocol) server providing web search and page fetching to
 | `search_tavily` | [Tavily](https://tavily.com/) | General-purpose web search with AI answer generation |
 | `search_exa` | [Exa](https://exa.ai/) | AI-native search with neural, keyword, and hybrid modes |
 | `search_perplexity` | [Perplexity](https://www.perplexity.ai/) | Lightweight structured web search |
-| `fetch_as_markdown` | [Cloudflare Browser Rendering](https://developers.cloudflare.com/browser-rendering/) | Fetches a URL and converts to Markdown (supports JS-rendered SPAs) |
+| `fetch_jina_markdown` | [Jina Reader](https://jina.ai/reader/) | Default lightweight Markdown fetch for most pages |
+| `fetch_as_markdown` | [Cloudflare Browser Rendering](https://developers.cloudflare.com/browser-rendering/) | Browser-rendered Markdown fallback for JS-heavy pages |
 
 ## Quick Start
 
@@ -50,6 +51,8 @@ Environment variables map to config fields using double-underscore (`__`) as the
 | Env Var | Config Field |
 |---------|-------------|
 | `TAVILY__API_KEYS` | `tavily.api_keys` |
+| `JINA__API_KEYS` | `jina.api_keys` |
+| `JINA__BASE_URL` | `jina.base_url` |
 | `CLOUDFLARE__ACCOUNTS` | `cloudflare.accounts` |
 | `KEY_ROTATION_STRATEGY` | `key_rotation_strategy` |
 
@@ -116,16 +119,38 @@ The `.env` format is **deprecated**. If `config.jsonc` does not exist, the serve
 | `max_tokens_per_page` | integer | `1024` | Max tokens per result page (256–2048) |
 | `country` | string | — | ISO 3166-1 alpha-2 country code |
 
+### `fetch_jina_markdown`
+
+**Endpoint:** `POST https://r.jina.ai/`
+
+Default first-choice Markdown fetch via Jina Reader. Use this first for most public pages. If the content is incomplete or the page requires real browser rendering / JavaScript execution, fall back to `fetch_as_markdown`. Returns the extracted Markdown directly as `content[0].text` with minimal metadata in `structuredContent`.
+
+Fixed request behavior:
+
+- `X-Respond-With: markdown`
+- `X-Retain-Images: none`
+- `X-Retain-Links: text`
+- `X-Cache-Tolerance: 3600` (accept cached responses up to 1 hour old)
+- `DNT: 1` (sends a Do Not Track signal)
+- `X-Timeout: 30` by default, derived from `request_timeout_ms`
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `url` | string | *(required)* | Absolute `http(s)` URL to fetch |
+| `wait_for_selector` | string | — | Wait for this CSS selector before extraction; if it never appears, the upstream request may fail |
+| `target_selector` | string | — | Restrict extraction to this CSS selector, useful for isolating the main content area |
+| `remove_selector` | string | — | Remove this CSS selector before extraction, such as ads, nav, or banners |
+
 ### `fetch_as_markdown`
 
 **Endpoint:** `POST https://api.cloudflare.com/client/v4/accounts/{account_id}/browser-rendering/markdown`
 
-Converts a URL to Markdown using Cloudflare's headless browser. Supports JavaScript-rendered pages (SPAs) via `gotoOptions` and `waitForSelector`.
+Cloudflare browser-rendering fallback. Use this after `fetch_jina_markdown` when content is missing, login-gated, or the page needs full browser rendering / JavaScript execution.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `url` | string | *(required)* | URL to fetch |
-| `html` | string | — | Raw HTML to convert (alternative to `url`) |
+| `url` | string | — | Absolute `http(s)` URL to fetch. Required unless `html` is provided |
+| `html` | string | — | Raw HTML to convert (alternative to `url`). Provide either `html` or `url` |
 | `cacheTTL` | integer | `5` | Cache TTL in seconds (0–86400, sent as query param) |
 | `gotoOptions` | object | — | `{waitUntil, timeout}` — navigation options |
 | `waitForSelector` | object | — | `{selector, visible, hidden, timeout}` — wait for element |
@@ -179,6 +204,7 @@ On startup, the server outputs a summary to stderr:
 [web-search]   Tavily: 13 key(s)
 [web-search]   Exa: 16 key(s)
 [web-search]   Perplexity: 9 key(s)
+[web-search]   Jina: anonymous access
 [web-search]   Cloudflare: 1 key(s)
 [web-search]   Strategy: round_robin | Timeout: 30000ms | Recovery: 300000ms | Max disable: 3
 [web-search] Ready.
@@ -201,6 +227,8 @@ The server reads standard proxy environment variables and routes all requests th
 | `exa.base_url` | `EXA__BASE_URL` | `https://api.exa.ai` | Exa API base URL |
 | `perplexity.api_keys` | `PERPLEXITY__API_KEYS` | — | Perplexity API key(s) |
 | `perplexity.base_url` | `PERPLEXITY__BASE_URL` | `https://api.perplexity.ai` | Perplexity API base URL |
+| `jina.api_keys` | `JINA__API_KEYS` | — | Optional Jina Reader API key(s) |
+| `jina.base_url` | `JINA__BASE_URL` | `https://r.jina.ai` | Jina Reader base URL |
 | `cloudflare.accounts` | `CLOUDFLARE__ACCOUNTS` | — | `[{account_id, api_token}]` pairs |
 | `cloudflare.base_url` | `CLOUDFLARE__BASE_URL` | `https://api.cloudflare.com/client/v4` | Cloudflare API base URL |
 | `key_rotation_strategy` | `KEY_ROTATION_STRATEGY` | `round_robin` | `round_robin` or `random` |

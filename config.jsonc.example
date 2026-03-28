@@ -19,6 +19,13 @@
     "base_url": "https://api.perplexity.ai"
   },
 
+  // Jina Reader (https://jina.ai/reader)
+  // API keys are optional; unauthenticated requests also work.
+  "jina": {
+    "api_keys": ["jina_xxxxx"],
+    "base_url": "https://r.jina.ai"
+  },
+
   // Cloudflare Browser Rendering (for fetch_as_markdown)
   // Each object pairs an account_id with its api_token.
   //

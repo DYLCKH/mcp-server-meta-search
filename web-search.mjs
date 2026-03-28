@@ -288,6 +288,44 @@ function coerceBoolOrEnum(v) {
   return v; // 可能是 "basic"/"advanced" 等 enum 值
 }
 
+function optionalPreprocess(preprocessor, schema) {
+  return z.preprocess(preprocessor, schema).optional();
+}
+
+function optionalBoolSchema() {
+  return optionalPreprocess(coerceBool, z.boolean());
+}
+
+function optionalIntSchema(schema) {
+  return optionalPreprocess(coerceInt, schema);
+}
+
+function optionalNumSchema(schema) {
+  return optionalPreprocess(coerceNum, schema);
+}
+
+function optionalBoolOrEnumSchema(schema) {
+  return optionalPreprocess(coerceBoolOrEnum, schema);
+}
+
+function isHttpUrl(value) {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+const httpUrlSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .url()
+  .refine(isHttpUrl, "Must be a valid absolute http(s) URL.");
+
+const optionalHttpUrlSchema = httpUrlSchema.optional();
+
 function safeJsonParse(text) {
   if (!text || typeof text !== "string") {
     return null;
@@ -542,7 +580,7 @@ function extractProviderErrorBody(rawText, jsonBody) {
   return "No error payload returned by provider";
 }
 
-async function fetchJsonWithTimeout(url, init, timeoutMs) {
+async function fetchResponseWithTimeout(url, init, timeoutMs) {
   const controller = new AbortController();
   const timeout = setTimeout(() => {
     controller.abort();
@@ -568,6 +606,37 @@ async function fetchJsonWithTimeout(url, init, timeoutMs) {
   }
 }
 
+function defaultExtractSuccessData(response) {
+  return response.json ?? response.rawText;
+}
+
+async function callSingleRequest({
+  providerName,
+  timeoutMs,
+  buildRequest,
+  extractData = defaultExtractSuccessData,
+}) {
+  const request = buildRequest();
+  const response = await fetchResponseWithTimeout(
+    request.url,
+    request.init,
+    timeoutMs,
+  );
+
+  if (!response.ok) {
+    throw new HttpProviderError(
+      providerName,
+      response.status,
+      extractProviderErrorBody(response.rawText, response.json),
+    );
+  }
+
+  return {
+    data: extractData(response),
+    attempts: 1,
+  };
+}
+
 async function callWithKeyRotation({
   providerName,
   keyPool,
@@ -575,6 +644,7 @@ async function callWithKeyRotation({
   configuredMaxAttempts,
   buildRequest,
   onKeyRevoked,
+  extractData = defaultExtractSuccessData,
 }) {
   if (!keyPool.hasKeys()) {
     throw new Error(
@@ -597,7 +667,7 @@ async function callWithKeyRotation({
 
     try {
       const request = buildRequest(selected.key);
-      const response = await fetchJsonWithTimeout(
+      const response = await fetchResponseWithTimeout(
         request.url,
         request.init,
         timeoutMs,
@@ -605,7 +675,7 @@ async function callWithKeyRotation({
 
       if (response.ok) {
         keyPool.markSuccess(selected.index);
-        return { data: response.json ?? response.rawText, attempts: attempt };
+        return { data: extractData(response), attempts: attempt };
       }
 
       throw new HttpProviderError(
@@ -695,6 +765,14 @@ const perplexityKeyPool = new KeyPool(
   healthOpts,
 );
 
+const jinaBaseUrl = normalizeBaseUrl(config.jina?.base_url, "https://r.jina.ai");
+const jinaKeyPool = new KeyPool(
+  "jina",
+  Array.isArray(config.jina?.api_keys) ? config.jina.api_keys : [],
+  keyRotationStrategy,
+  healthOpts,
+);
+
 const cfBaseUrl = normalizeBaseUrl(config.cloudflare?.base_url, "https://api.cloudflare.com/client/v4");
 const cfCredentials = Array.isArray(config.cloudflare?.accounts)
   ? config.cloudflare.accounts.map((a) => ({
@@ -703,10 +781,21 @@ const cfCredentials = Array.isArray(config.cloudflare?.accounts)
     }))
   : [];
 const cfKeyPool = new KeyPool("cloudflare", cfCredentials, keyRotationStrategy, healthOpts);
+const jinaReaderTimeoutSeconds = Math.max(1, Math.min(180, Math.ceil(requestTimeoutMs / 1000)));
+const jinaReaderFixedHeaders = {
+  Accept: "text/plain",
+  "Content-Type": "application/json",
+  "X-Respond-With": "markdown",
+  "X-Retain-Images": "none",
+  "X-Retain-Links": "text",
+  "X-Cache-Tolerance": "3600",
+  "X-Timeout": String(jinaReaderTimeoutSeconds),
+  DNT: "1",
+};
 
 const server = new McpServer({
   name: "web-search",
-  version: "1.1.0",
+  version: "1.2.1",
 });
 
 server.registerTool(
@@ -717,7 +806,7 @@ server.registerTool(
       "Perform web search via Tavily. Best for general search with structured output and built-in answer generation.",
     inputSchema: {
       query: z.string().min(1).describe("The search query to execute with Tavily."),
-      max_results: z.preprocess(coerceInt, z.number().int().min(1).max(20).optional()).describe("The maximum number of search results to return (1-20, default 5)."),
+      max_results: optionalIntSchema(z.number().int().min(1).max(20)).describe("The maximum number of search results to return (1-20, default 5)."),
       search_depth: z
         .enum(["basic", "advanced", "fast", "ultra-fast"])
         .optional()
@@ -729,19 +818,17 @@ server.registerTool(
         .describe("The time range back from the current date to filter results based on publish date or last updated date."),
       include_domains: z.array(z.string().min(1)).max(300).optional().describe("A list of domains to specifically include in the search results. Maximum 300 domains."),
       exclude_domains: z.array(z.string().min(1)).max(150).optional().describe("A list of domains to specifically exclude from the search results. Maximum 150 domains."),
-      include_answer: z.preprocess(
-        coerceBoolOrEnum,
-        z.union([z.boolean(), z.enum(["basic", "advanced"])]).optional(),
+      include_answer: optionalBoolOrEnumSchema(
+        z.union([z.boolean(), z.enum(["basic", "advanced"])]),
       ),
-      include_raw_content: z.preprocess(
-        coerceBoolOrEnum,
-        z.union([z.boolean(), z.enum(["markdown", "text"])]).optional(),
+      include_raw_content: optionalBoolOrEnumSchema(
+        z.union([z.boolean(), z.enum(["markdown", "text"])]),
       ),
-      include_images: z.preprocess(coerceBool, z.boolean().optional()),
-      include_image_descriptions: z.preprocess(coerceBool, z.boolean().optional()),
-      include_favicon: z.preprocess(coerceBool, z.boolean().optional()),
-      auto_parameters: z.preprocess(coerceBool, z.boolean().optional()),
-      include_usage: z.preprocess(coerceBool, z.boolean().optional()),
+      include_images: optionalBoolSchema(),
+      include_image_descriptions: optionalBoolSchema(),
+      include_favicon: optionalBoolSchema(),
+      auto_parameters: optionalBoolSchema(),
+      include_usage: optionalBoolSchema(),
     },
     annotations: {
       readOnlyHint: true,
@@ -819,7 +906,7 @@ server.registerTool(
       "Perform web search via Exa. Best for semantic search, finding similar content, people/company lookups, and research papers.",
     inputSchema: {
       query: z.string().min(1).describe("The query string for the search"),
-      num_results: z.preprocess(coerceInt, z.number().int().min(1).max(100).optional()).describe("Number of results to return (1-100, default 10)"),
+      num_results: optionalIntSchema(z.number().int().min(1).max(100)).describe("Number of results to return (1-100, default 10)"),
       type: z.enum(["neural", "fast", "auto", "deep", "instant"]).optional().describe("Search type: neural (embeddings-based), auto (default, intelligently combines methods), fast (streamlined models), deep (light deep search), instant (lowest latency for real-time apps)"),
       category: z
         .enum([
@@ -840,11 +927,11 @@ server.registerTool(
       end_crawl_date: z.string().optional(),
       start_published_date: z.string().optional().describe("Only links with a published date after this will be returned. Must be in ISO 8601 format"),
       end_published_date: z.string().optional().describe("Only links with a published date before this will be returned. Must be in ISO 8601 format"),
-      include_text: z.preprocess(coerceBool, z.boolean().optional()),
-      include_highlights: z.preprocess(coerceBool, z.boolean().optional()),
-      include_summary: z.preprocess(coerceBool, z.boolean().optional()),
+      include_text: optionalBoolSchema(),
+      include_highlights: optionalBoolSchema(),
+      include_summary: optionalBoolSchema(),
       summary_query: z.string().optional(),
-      max_age_hours: z.preprocess(coerceInt, z.number().int().optional()),
+      max_age_hours: optionalIntSchema(z.number().int()),
     },
     annotations: {
       readOnlyHint: true,
@@ -932,8 +1019,8 @@ server.registerTool(
       "Perform web search via Perplexity. Best for AI-synthesized answers with inline citations and high factuality.",
     inputSchema: {
       query: z.string().min(1).describe("The search query to execute with Perplexity."),
-      max_results: z.preprocess(coerceInt, z.number().int().min(1).max(20).optional()).describe("The maximum number of search results to return (1-20, default 10)."),
-      max_tokens_per_page: z.preprocess(coerceInt, z.number().int().min(256).max(2048).optional()).describe("Maximum tokens of content to return per result page (256-2048, default 1024)."),
+      max_results: optionalIntSchema(z.number().int().min(1).max(20)).describe("The maximum number of search results to return (1-20, default 10)."),
+      max_tokens_per_page: optionalIntSchema(z.number().int().min(256).max(2048)).describe("Maximum tokens of content to return per result page (256-2048, default 1024)."),
       country: z.string().length(2).optional().describe("ISO 3166-1 alpha-2 country code to bias search results, e.g. US, CN, GB."),
     },
     annotations: {
@@ -988,25 +1075,109 @@ server.registerTool(
 );
 
 server.registerTool(
-  "fetch_as_markdown",
+  "fetch_jina_markdown",
   {
-    title: "Fetch as Markdown (Cloudflare Browser Rendering)",
+    title: "Fetch Jina Markdown",
     description:
-      "Fetches a URL via Cloudflare Browser Rendering and converts to Markdown. " +
-      "NOT the first choice — prefer other fetch tools; use only when they fail or JS rendering is required.",
+      "Fetch a webpage as Markdown via Jina Reader. Try this first for most public pages; if the content is incomplete or the page needs real browser rendering / JavaScript execution, use fetch_as_markdown next.",
     inputSchema: {
-      url: z
+      url: httpUrlSchema.describe("The absolute http(s) URL of the webpage to fetch as Markdown."),
+      wait_for_selector: z
         .string()
         .min(1)
-        .describe("The URL of the webpage to convert to Markdown."),
+        .optional()
+        .describe("Optional CSS selector to wait for before extraction. If the selector never appears, the request may fail upstream."),
+      target_selector: z
+        .string()
+        .min(1)
+        .optional()
+        .describe("Optional CSS selector limiting extraction to a specific part of the page. Use this to focus on the main content area."),
+      remove_selector: z
+        .string()
+        .min(1)
+        .optional()
+        .describe("Optional CSS selector to remove from the page before extraction, such as nav, ads, or cookie banners."),
+    },
+    annotations: {
+      readOnlyHint: true,
+    },
+  },
+  async (input) => {
+    const headers = { ...jinaReaderFixedHeaders };
+
+    if (input.wait_for_selector) {
+      headers["X-Wait-For-Selector"] = input.wait_for_selector;
+    }
+    if (input.target_selector) {
+      headers["X-Target-Selector"] = input.target_selector;
+    }
+    if (input.remove_selector) {
+      headers["X-Remove-Selector"] = input.remove_selector;
+    }
+
+    const buildRequest = (apiKey) => ({
+      url: `${jinaBaseUrl}/`,
+      init: {
+        method: "POST",
+        headers: apiKey
+          ? {
+              ...headers,
+              Authorization: `Bearer ${apiKey}`,
+            }
+          : headers,
+        body: JSON.stringify({ url: input.url }),
+      },
+    });
+
+    const response = jinaKeyPool.hasKeys()
+      ? await callWithKeyRotation({
+          providerName: "jina",
+          keyPool: jinaKeyPool,
+          timeoutMs: requestTimeoutMs,
+          configuredMaxAttempts: maxAttemptsPerRequest,
+          onKeyRevoked,
+          buildRequest,
+          extractData: (result) => result.rawText,
+        })
+      : await callSingleRequest({
+          providerName: "jina",
+          timeoutMs: requestTimeoutMs,
+          buildRequest: () => buildRequest(),
+          extractData: (result) => result.rawText,
+        });
+
+    const markdown = typeof response.data === "string" ? response.data : "";
+    const normalized = {
+      provider: "jina_reader",
+      attempts: response.attempts,
+      url: input.url,
+      authenticated: jinaKeyPool.hasKeys(),
+    };
+
+    return {
+      content: [{ type: "text", text: markdown }],
+      structuredContent: normalized,
+    };
+  },
+);
+
+server.registerTool(
+  "fetch_as_markdown",
+  {
+    title: "Fetch as Markdown (Cloudflare Browser Fallback)",
+    description:
+      "Browser-rendered Markdown fallback via Cloudflare. " +
+      "Use this after fetch_jina_markdown when content is missing, login-gated, or requires real browser rendering / JavaScript execution.",
+    inputSchema: z.object({
+      url: optionalHttpUrlSchema.describe("The absolute http(s) URL of the webpage to convert to Markdown. Required unless html is provided."),
       html: z
         .string()
+        .min(1)
         .optional()
         .describe(
-          "Raw HTML to convert directly (alternative to url). When provided, url is ignored by the API.",
+          "Raw HTML to convert directly (alternative to url). Provide either html or url. When html is provided, url is ignored by the API.",
         ),
-      cacheTTL: z
-        .preprocess(coerceInt, z.number().int().min(0).max(86400).optional())
+      cacheTTL: optionalIntSchema(z.number().int().min(0).max(86400))
         .describe(
           "Cache TTL in seconds (0 to disable, max 86400). Default: 5. Passed as query parameter.",
         ),
@@ -1018,11 +1189,7 @@ server.registerTool(
             .describe(
               "When to consider navigation complete. Use 'networkidle0' or 'networkidle2' for JS-heavy pages.",
             ),
-          timeout: z
-            .preprocess(
-              coerceInt,
-              z.number().int().min(0).max(60000).optional(),
-            )
+          timeout: optionalIntSchema(z.number().int().min(0).max(60000))
             .describe("Max navigation time in ms (max 60000)."),
         })
         .optional()
@@ -1033,17 +1200,9 @@ server.registerTool(
             .string()
             .min(1)
             .describe("CSS selector to wait for before extraction."),
-          visible: z
-            .preprocess(coerceBool, z.boolean().optional())
-            .describe("Wait until element is visible."),
-          hidden: z
-            .preprocess(coerceBool, z.boolean().optional())
-            .describe("Wait until element is hidden."),
-          timeout: z
-            .preprocess(
-              coerceInt,
-              z.number().int().min(0).max(60000).optional(),
-            )
+          visible: optionalBoolSchema().describe("Wait until element is visible."),
+          hidden: optionalBoolSchema().describe("Wait until element is hidden."),
+          timeout: optionalIntSchema(z.number().int().min(0).max(60000))
             .describe("Max wait time for selector in ms."),
         })
         .optional()
@@ -1073,12 +1232,8 @@ server.registerTool(
             value: z.string().describe("Cookie value."),
             domain: z.string().optional().describe("Cookie domain."),
             path: z.string().optional().describe("Cookie path."),
-            secure: z
-              .preprocess(coerceBool, z.boolean().optional())
-              .describe("Secure flag."),
-            httpOnly: z
-              .preprocess(coerceBool, z.boolean().optional())
-              .describe("HttpOnly flag."),
+            secure: optionalBoolSchema().describe("Secure flag."),
+            httpOnly: optionalBoolSchema().describe("HttpOnly flag."),
           }),
         )
         .optional()
@@ -1098,15 +1253,9 @@ server.registerTool(
         ),
       viewport: z
         .object({
-          width: z
-            .preprocess(coerceInt, z.number().int().optional())
-            .describe("Viewport width in pixels."),
-          height: z
-            .preprocess(coerceInt, z.number().int().optional())
-            .describe("Viewport height in pixels."),
-          deviceScaleFactor: z
-            .preprocess(coerceNum, z.number().optional())
-            .describe("Device scale factor (DPR)."),
+          width: optionalIntSchema(z.number().int()).describe("Viewport width in pixels."),
+          height: optionalIntSchema(z.number().int()).describe("Viewport height in pixels."),
+          deviceScaleFactor: optionalNumSchema(z.number()).describe("Device scale factor (DPR)."),
         })
         .optional()
         .describe("Browser viewport dimensions."),
@@ -1141,10 +1290,16 @@ server.registerTool(
         )
         .optional()
         .describe("CSS tags to inject before rendering."),
-      setJavaScriptEnabled: z
-        .preprocess(coerceBool, z.boolean().optional())
-        .describe("Enable/disable JavaScript execution (default: true)."),
-    },
+      setJavaScriptEnabled: optionalBoolSchema().describe("Enable/disable JavaScript execution (default: true)."),
+    }).superRefine((input, ctx) => {
+      if (!input.url && !input.html) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [],
+          message: "Provide either url or html.",
+        });
+      }
+    }),
     annotations: {
       readOnlyHint: true,
     },
@@ -1232,13 +1387,22 @@ async function main() {
     { name: "Tavily", pool: tavilyKeyPool },
     { name: "Exa", pool: exaKeyPool },
     { name: "Perplexity", pool: perplexityKeyPool },
+    {
+      name: "Jina",
+      pool: jinaKeyPool,
+      formatStatus: (count) => (count > 0 ? `${count} key(s)` : "anonymous access"),
+    },
     { name: "Cloudflare", pool: cfKeyPool },
   ];
 
   process.stderr.write("[web-search] Starting up...\n");
-  for (const { name, pool } of providers) {
+  for (const { name, pool, formatStatus } of providers) {
     const count = pool.size();
-    const status = count > 0 ? `${count} key(s)` : "not configured";
+    const status = formatStatus
+      ? formatStatus(count)
+      : count > 0
+        ? `${count} key(s)`
+        : "not configured";
     process.stderr.write(`[web-search]   ${name}: ${status}\n`);
   }
   process.stderr.write(
