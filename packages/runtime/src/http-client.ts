@@ -1,6 +1,11 @@
 import { HttpProviderError, RETRYABLE_HTTP_STATUS } from "@meta-search/shared";
 import type { KeySelection } from "./key-pool.js";
 import { KeyPool } from "./key-pool.js";
+import type { ResultCache } from "./perf/cache.js";
+import type { ConcurrencyLimiter } from "./perf/concurrency.js";
+import type { SingleFlight } from "./perf/single-flight.js";
+import type { CircuitBreaker } from "./perf/circuit-breaker.js";
+import type { MetricsCollector } from "./perf/metrics.js";
 
 export interface FetchResponse {
   ok: boolean;
@@ -178,6 +183,110 @@ export async function callWithKeyRotation(
     );
   }
   throw lastError ?? new Error(`${providerName}: request failed after ${attemptLimit} attempt(s).`);
+}
+
+// ---------------------------------------------------------------------------
+// Performance Middleware
+// ---------------------------------------------------------------------------
+
+export interface PerfMiddleware {
+  cache?: ResultCache;
+  limiter?: ConcurrencyLimiter;
+  singleFlight?: SingleFlight;
+  circuitBreaker?: CircuitBreaker;
+  metrics?: MetricsCollector;
+}
+
+export interface CallWithPerfOpts extends KeyRotationOpts {
+  perf?: PerfMiddleware;
+  cacheKey?: string;
+}
+
+export async function callWithPerf(opts: CallWithPerfOpts): Promise<RequestResult> {
+  const { perf, cacheKey, ...rotationOpts } = opts;
+  const providerName = rotationOpts.providerName;
+  const tool = rotationOpts.providerName;
+
+  // Without perf middleware, just delegate directly
+  if (!perf) {
+    return callWithKeyRotation(rotationOpts);
+  }
+
+  const start = performance.now();
+
+  // 1. Circuit breaker check
+  if (perf.circuitBreaker) {
+    // circuitBreaker.execute wraps the entire flow
+    return perf.circuitBreaker.execute(() =>
+      callWithPerfInner(opts, providerName, tool, start),
+    );
+  }
+
+  return callWithPerfInner(opts, providerName, tool, start);
+}
+
+async function callWithPerfInner(
+  opts: CallWithPerfOpts,
+  providerName: string,
+  tool: string,
+  start: number,
+): Promise<RequestResult> {
+  const { perf, cacheKey, ...rotationOpts } = opts;
+  if (!perf) return callWithKeyRotation(rotationOpts);
+
+  // 2. Cache check
+  if (perf.cache && cacheKey) {
+    const cached = perf.cache.get(cacheKey);
+    if (cached.hit) {
+      perf.metrics?.recordCacheHit(true);
+      perf.metrics?.recordRequest(providerName, tool, performance.now() - start, "success");
+      return cached.data as RequestResult;
+    }
+    perf.metrics?.recordCacheHit(false);
+  }
+
+  // 3. Single-flight dedup
+  const sfKey = cacheKey ?? `${providerName}:${Date.now()}:${Math.random()}`;
+  const exec = () => callWithPerfCore(opts, providerName, tool, start);
+
+  if (perf.singleFlight) {
+    return perf.singleFlight.dedup(sfKey, exec);
+  }
+
+  return exec();
+}
+
+async function callWithPerfCore(
+  opts: CallWithPerfOpts,
+  providerName: string,
+  tool: string,
+  start: number,
+): Promise<RequestResult> {
+  const { perf, cacheKey, ...rotationOpts } = opts;
+  if (!perf) return callWithKeyRotation(rotationOpts);
+
+  // 4. Acquire concurrency slot
+  let release: (() => void) | undefined;
+  if (perf.limiter) {
+    release = await perf.limiter.acquire();
+  }
+
+  try {
+    const result = await callWithKeyRotation(rotationOpts);
+
+    // Cache result on success
+    if (perf.cache && cacheKey) {
+      perf.cache.set(cacheKey, result);
+    }
+
+    perf.metrics?.recordRequest(providerName, tool, performance.now() - start, "success");
+    return result;
+  } catch (error) {
+    perf.metrics?.recordRequest(providerName, tool, performance.now() - start, "error");
+    throw error;
+  } finally {
+    release?.();
+  }
 }
 
 const AUTH_ERROR_STATUSES = new Set([401, 402, 403]);

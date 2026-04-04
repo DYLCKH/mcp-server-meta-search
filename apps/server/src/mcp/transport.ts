@@ -5,8 +5,9 @@ import {
   KeyPool,
   callWithKeyRotation,
   callSingleRequest,
+  callWithPerf,
 } from "@meta-search/runtime";
-import type { RequestResult } from "@meta-search/runtime";
+import type { RequestResult, PerfInstances, PerfMiddleware } from "@meta-search/runtime";
 import {
   compactObject,
   stringifyForToolContent,
@@ -22,6 +23,7 @@ import type { ResolvedConfig } from "@meta-search/config";
 
 export interface RuntimeState {
   config: ResolvedConfig;
+  perf?: PerfInstances;
   tavilyKeyPool: KeyPool;
   exaKeyPool: KeyPool;
   perplexityKeyPool: KeyPool;
@@ -42,6 +44,7 @@ function normalizeResults(results: unknown): unknown[] {
 function registerTools(server: McpServer, rt: RuntimeState): void {
   const {
     config,
+    perf,
     tavilyKeyPool,
     exaKeyPool,
     perplexityKeyPool,
@@ -49,6 +52,18 @@ function registerTools(server: McpServer, rt: RuntimeState): void {
     cloudflareKeyPool,
     onKeyRevoked,
   } = rt;
+
+  const perfEnabled = config.performance;
+  function makePerf(provider: string): PerfMiddleware | undefined {
+    if (!perf) return undefined;
+    const p: PerfMiddleware = {};
+    if (perfEnabled.cache.enabled) p.cache = perf.cache;
+    if (perfEnabled.circuitBreaker.enabled) p.circuitBreaker = perf.circuitBreaker;
+    if (perfEnabled.singleFlight.enabled) p.singleFlight = perf.singleFlight;
+    p.limiter = perf.limiter;
+    p.metrics = perf.metrics;
+    return p;
+  }
 
   const requestTimeoutMs = config.request_timeout_ms;
   const maxAttemptsPerRequest = config.max_attempts_per_request;
@@ -120,12 +135,14 @@ function registerTools(server: McpServer, rt: RuntimeState): void {
         include_usage: input.include_usage,
       });
 
-      const { data, attempts } = await callWithKeyRotation({
+      const { data, attempts } = await callWithPerf({
         providerName: "tavily",
         keyPool: tavilyKeyPool,
         timeoutMs: requestTimeoutMs,
         configuredMaxAttempts: maxAttemptsPerRequest,
         onKeyRevoked,
+        perf: makePerf("tavily"),
+        cacheKey: `tavily:search:${JSON.stringify(payload)}`,
         buildRequest: (apiKey) => ({
           url: `${tavilyBaseUrl}/search`,
           init: {
@@ -214,12 +231,14 @@ function registerTools(server: McpServer, rt: RuntimeState): void {
         contents: Object.keys(contents).length > 0 ? contents : undefined,
       });
 
-      const { data, attempts } = await callWithKeyRotation({
+      const { data, attempts } = await callWithPerf({
         providerName: "exa",
         keyPool: exaKeyPool,
         timeoutMs: requestTimeoutMs,
         configuredMaxAttempts: maxAttemptsPerRequest,
         onKeyRevoked,
+        perf: makePerf("exa"),
+        cacheKey: `exa:search:${JSON.stringify(payload)}`,
         buildRequest: (apiKey) => ({
           url: `${exaBaseUrl}/search`,
           init: {
@@ -271,12 +290,14 @@ function registerTools(server: McpServer, rt: RuntimeState): void {
         country: input.country,
       });
 
-      const { data, attempts } = await callWithKeyRotation({
+      const { data, attempts } = await callWithPerf({
         providerName: "perplexity",
         keyPool: perplexityKeyPool,
         timeoutMs: requestTimeoutMs,
         configuredMaxAttempts: maxAttemptsPerRequest,
         onKeyRevoked,
+        perf: makePerf("perplexity"),
+        cacheKey: `perplexity:search:${JSON.stringify(payload)}`,
         buildRequest: (apiKey) => ({
           url: `${perplexityBaseUrl}/search`,
           init: {
@@ -334,12 +355,14 @@ function registerTools(server: McpServer, rt: RuntimeState): void {
       });
 
       const response: RequestResult = jinaKeyPool.hasKeys()
-        ? await callWithKeyRotation({
+        ? await callWithPerf({
             providerName: "jina",
             keyPool: jinaKeyPool,
             timeoutMs: requestTimeoutMs,
             configuredMaxAttempts: maxAttemptsPerRequest,
             onKeyRevoked,
+            perf: makePerf("jina"),
+            cacheKey: `jina:fetch:${input.url}`,
             buildRequest: (apiKey) => buildRequest(apiKey as string),
             extractData: (r) => r.rawText,
           })
@@ -451,12 +474,14 @@ function registerTools(server: McpServer, rt: RuntimeState): void {
         setJavaScriptEnabled: input.setJavaScriptEnabled,
       });
 
-      const { data, attempts } = await callWithKeyRotation({
+      const { data, attempts } = await callWithPerf({
         providerName: "cloudflare",
         keyPool: cloudflareKeyPool,
         timeoutMs: requestTimeoutMs,
         configuredMaxAttempts: maxAttemptsPerRequest,
         onKeyRevoked,
+        perf: makePerf("cloudflare"),
+        cacheKey: `cloudflare:fetch:${input.url ?? ""}:${input.html ? "html" : ""}`,
         buildRequest: (cred) => {
           const c = cred as { accountId: string; token: string };
           return {

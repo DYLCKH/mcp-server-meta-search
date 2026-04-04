@@ -9,7 +9,8 @@ import { getRequestListener } from "@hono/node-server";
 
 import { resolveConfig } from "@meta-search/config";
 import type { ResolvedConfig } from "@meta-search/config";
-import { KeyPool, createKeyRevokedHandler } from "@meta-search/runtime";
+import { KeyPool, createKeyRevokedHandler, createPerfInstances } from "@meta-search/runtime";
+import type { PerfInstances } from "@meta-search/runtime";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
@@ -69,8 +70,16 @@ function buildRuntimeState(config: ResolvedConfig): RuntimeState {
   const invalidKeysPath = join(process.cwd(), config.invalid_keys_file);
   const onKeyRevoked = createKeyRevokedHandler(invalidKeysPath);
 
+  // Performance instances (conditionally created)
+  const perfConfig = config.performance;
+  const perf: PerfInstances | undefined =
+    (perfConfig.cache.enabled || perfConfig.circuitBreaker.enabled || perfConfig.singleFlight.enabled)
+      ? createPerfInstances(perfConfig)
+      : undefined;
+
   return {
     config,
+    perf,
     tavilyKeyPool: new KeyPool({
       providerName: "tavily",
       keys: config.tavily?.api_keys ?? [],
@@ -177,7 +186,7 @@ async function serveStaticFile(
 // ---------------------------------------------------------------------------
 
 function printStartupSummary(rt: RuntimeState): void {
-  const { config } = rt;
+  const { config, perf } = rt;
   const providers = [
     { name: "Tavily", pool: rt.tavilyKeyPool },
     { name: "Exa", pool: rt.exaKeyPool },
@@ -199,6 +208,18 @@ function printStartupSummary(rt: RuntimeState): void {
       `Timeout: ${config.request_timeout_ms}ms | ` +
       `Recovery: ${config.key_recovery_interval_ms}ms\n`,
   );
+
+  if (perf) {
+    const pc = config.performance;
+    const parts: string[] = [];
+    if (pc.cache.enabled) parts.push(`cache(max=${pc.cache.maxSize},ttl=${pc.cache.defaultTtlMs}ms)`);
+    if (pc.circuitBreaker.enabled) parts.push(`cb(threshold=${pc.circuitBreaker.failureThreshold})`);
+    if (pc.singleFlight.enabled) parts.push("single-flight");
+    parts.push(`concurrency(${pc.concurrency.maxConcurrency})`);
+    if (parts.length > 0) {
+      process.stderr.write(`[meta-search]   Perf: ${parts.join(", ")}\n`);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -255,6 +276,16 @@ async function main(): Promise<void> {
       return c.text("OK");
     }
     return c.text("Not ready", 503);
+  });
+
+  app.get("/metrics", (c) => {
+    const metrics = runtimeStateRef.current.perf?.metrics;
+    if (!metrics) {
+      return c.text("", 200);
+    }
+    const text = metrics.getPrometheusMetrics();
+    c.header("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+    return c.text(text, 200);
   });
 
   // Mount admin API routes

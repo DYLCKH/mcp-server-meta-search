@@ -6,3 +6,4 @@ invalid-keys.json
 dist/
 *.tsbuildinfo
 .turbo/
+logs.db

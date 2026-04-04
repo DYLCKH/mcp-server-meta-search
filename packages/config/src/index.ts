@@ -67,6 +67,27 @@ const AdminAuthSchema = z.object({
   session_ttl_ms: z.number().optional(),
 });
 
+const PerformanceSchema = z.object({
+  cache: z.object({
+    enabled: z.boolean().optional(),
+    maxSize: z.number().optional(),
+    defaultTtlMs: z.number().optional(),
+  }).optional(),
+  concurrency: z.object({
+    maxConcurrency: z.number().optional(),
+    maxQueueSize: z.number().optional(),
+    queueTimeoutMs: z.number().optional(),
+  }).optional(),
+  circuitBreaker: z.object({
+    enabled: z.boolean().optional(),
+    failureThreshold: z.number().optional(),
+    resetTimeoutMs: z.number().optional(),
+  }).optional(),
+  singleFlight: z.object({
+    enabled: z.boolean().optional(),
+  }).optional(),
+}).optional();
+
 const AppConfigSchema = z.object({
   tavily: ProviderKeysSchema.optional(),
   exa: ProviderKeysSchema.optional(),
@@ -81,6 +102,7 @@ const AppConfigSchema = z.object({
   invalid_keys_file: z.string().optional(),
   pats: z.array(PatRecordSchema).optional(),
   admin: AdminAuthSchema.optional(),
+  performance: PerformanceSchema,
 });
 
 // ---------------------------------------------------------------------------
@@ -93,6 +115,28 @@ export type CloudflareAccount = z.infer<typeof CloudflareAccountSchema>;
 export type CloudflareConfig = z.infer<typeof CloudflareConfigSchema>;
 export type PatRecord = z.infer<typeof PatRecordSchema>;
 export type AdminAuth = z.infer<typeof AdminAuthSchema>;
+export type PerformanceConfig = z.infer<typeof PerformanceSchema>;
+
+export interface ResolvedPerformanceConfig {
+  cache: {
+    enabled: boolean;
+    maxSize: number;
+    defaultTtlMs: number;
+  };
+  concurrency: {
+    maxConcurrency: number;
+    maxQueueSize: number;
+    queueTimeoutMs: number;
+  };
+  circuitBreaker: {
+    enabled: boolean;
+    failureThreshold: number;
+    resetTimeoutMs: number;
+  };
+  singleFlight: {
+    enabled: boolean;
+  };
+}
 
 export interface ResolvedConfig {
   tavily?: ProviderKeys;
@@ -108,6 +152,7 @@ export interface ResolvedConfig {
   key_recovery_interval_ms: number;
   max_disable_before_revoke: number;
   invalid_keys_file: string;
+  performance: ResolvedPerformanceConfig;
 }
 
 // ---------------------------------------------------------------------------
@@ -127,6 +172,12 @@ const DEFAULTS = {
   key_recovery_interval_ms: 300_000,
   max_disable_before_revoke: 3,
   invalid_keys_file: "invalid-keys.json",
+  performance: {
+    cache: { enabled: true, maxSize: 512, defaultTtlMs: 60_000 },
+    concurrency: { maxConcurrency: 8, maxQueueSize: 64, queueTimeoutMs: 30_000 },
+    circuitBreaker: { enabled: true, failureThreshold: 5, resetTimeoutMs: 30_000 },
+    singleFlight: { enabled: true },
+  } satisfies ResolvedPerformanceConfig,
 };
 
 /**
@@ -236,6 +287,31 @@ export function resolveConfig(configPath: string): ResolvedConfig {
     key_recovery_interval_ms: config.key_recovery_interval_ms ?? DEFAULTS.key_recovery_interval_ms,
     max_disable_before_revoke: config.max_disable_before_revoke ?? DEFAULTS.max_disable_before_revoke,
     invalid_keys_file: config.invalid_keys_file ?? DEFAULTS.invalid_keys_file,
+    performance: resolvePerformance(config.performance),
   };
   return result;
+}
+
+function resolvePerformance(perf?: PerformanceConfig): ResolvedPerformanceConfig {
+  const d = DEFAULTS.performance;
+  return {
+    cache: {
+      enabled: perf?.cache?.enabled ?? d.cache.enabled,
+      maxSize: perf?.cache?.maxSize ?? d.cache.maxSize,
+      defaultTtlMs: perf?.cache?.defaultTtlMs ?? d.cache.defaultTtlMs,
+    },
+    concurrency: {
+      maxConcurrency: perf?.concurrency?.maxConcurrency ?? d.concurrency.maxConcurrency,
+      maxQueueSize: perf?.concurrency?.maxQueueSize ?? d.concurrency.maxQueueSize,
+      queueTimeoutMs: perf?.concurrency?.queueTimeoutMs ?? d.concurrency.queueTimeoutMs,
+    },
+    circuitBreaker: {
+      enabled: perf?.circuitBreaker?.enabled ?? d.circuitBreaker.enabled,
+      failureThreshold: perf?.circuitBreaker?.failureThreshold ?? d.circuitBreaker.failureThreshold,
+      resetTimeoutMs: perf?.circuitBreaker?.resetTimeoutMs ?? d.circuitBreaker.resetTimeoutMs,
+    },
+    singleFlight: {
+      enabled: perf?.singleFlight?.enabled ?? d.singleFlight.enabled,
+    },
+  };
 }

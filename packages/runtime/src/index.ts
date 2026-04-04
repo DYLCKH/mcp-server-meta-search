@@ -9,9 +9,27 @@ export {
   fetchResponseWithTimeout,
   callSingleRequest,
   callWithKeyRotation,
+  callWithPerf,
   defaultExtractSuccessData,
 } from "./http-client.js";
-export type { FetchResponse, ExtractDataFn, SingleRequestOpts, KeyRotationOpts, RequestResult } from "./http-client.js";
+export type { FetchResponse, ExtractDataFn, SingleRequestOpts, KeyRotationOpts, RequestResult, PerfMiddleware, CallWithPerfOpts } from "./http-client.js";
+
+// --- Performance primitives ---
+export {
+  ResultCache,
+  ConcurrencyLimiter,
+  SingleFlight,
+  CircuitBreaker,
+  CircuitOpenError,
+  MetricsCollector,
+} from "./perf/index.js";
+export type {
+  CacheConfig,
+  ConcurrencyConfig,
+  CircuitBreakerConfig,
+  CircuitState,
+  ProviderStats,
+} from "./perf/index.js";
 
 // --- Invalid key tracking ---
 export { createKeyRevokedHandler } from "./invalid-keys.js";
@@ -33,11 +51,16 @@ export { TOOL_NAME as CLOUDFLARE_TOOL_NAME, TOOL_DEFINITION as CLOUDFLARE_TOOL_D
 export type { CloudflareHandlerDeps } from "./providers/cloudflare.js";
 
 // --- Provider factory ---
-import type { ResolvedConfig } from "@meta-search/config";
+import type { ResolvedConfig, ResolvedPerformanceConfig } from "@meta-search/config";
 import { normalizeBaseUrl } from "@meta-search/shared";
 import { KeyPool } from "./key-pool.js";
 import type { KeyPoolOpts } from "./key-pool.js";
 import { createKeyRevokedHandler } from "./invalid-keys.js";
+import { ResultCache } from "./perf/cache.js";
+import { ConcurrencyLimiter } from "./perf/concurrency.js";
+import { SingleFlight } from "./perf/single-flight.js";
+import { CircuitBreaker } from "./perf/circuit-breaker.js";
+import { MetricsCollector } from "./perf/metrics.js";
 import { createTavilyHandler } from "./providers/tavily.js";
 import { createExaHandler } from "./providers/exa.js";
 import { createPerplexityHandler } from "./providers/perplexity.js";
@@ -74,6 +97,35 @@ export interface ProviderInstances {
     baseUrl: string;
     keyPool: KeyPool;
     handler: ReturnType<typeof createCloudflareHandler>;
+  };
+}
+
+export interface PerfInstances {
+  cache: ResultCache;
+  limiter: ConcurrencyLimiter;
+  singleFlight: SingleFlight;
+  circuitBreaker: CircuitBreaker;
+  metrics: MetricsCollector;
+}
+
+export function createPerfInstances(perfConfig: ResolvedPerformanceConfig): PerfInstances {
+  return {
+    cache: new ResultCache({
+      maxSize: perfConfig.cache.maxSize,
+      defaultTtlMs: perfConfig.cache.defaultTtlMs,
+    }),
+    limiter: new ConcurrencyLimiter("global", {
+      maxConcurrency: perfConfig.concurrency.maxConcurrency,
+      maxQueueSize: perfConfig.concurrency.maxQueueSize,
+      queueTimeoutMs: perfConfig.concurrency.queueTimeoutMs,
+    }),
+    singleFlight: new SingleFlight(),
+    circuitBreaker: new CircuitBreaker("global", {
+      failureThreshold: perfConfig.circuitBreaker.failureThreshold,
+      resetTimeoutMs: perfConfig.circuitBreaker.resetTimeoutMs,
+      halfOpenMaxRequests: 1,
+    }),
+    metrics: new MetricsCollector(),
   };
 }
 
