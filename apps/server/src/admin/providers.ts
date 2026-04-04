@@ -1,10 +1,11 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { writeConfigAtomic, loadConfig } from "@meta-search/config";
+import { writeConfigAtomic, loadConfig, AppConfigSchema } from "@meta-search/config";
 import type { AppConfig, CloudflareAccount } from "@meta-search/config";
 import { maskKey } from "@meta-search/shared";
 import type { AdminDeps, ProviderName } from "./types.js";
 import { PROVIDER_NAMES, getKeyPool } from "./types.js";
+import { applyResolvedConfig } from "../runtime-state.js";
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -87,7 +88,8 @@ function isCloudflare(name: ProviderName): boolean {
 }
 
 function writeConfigAndReload(deps: AdminDeps, config: AppConfig) {
-  writeConfigAtomic(deps.configPath, config);
+  writeConfigAtomic(deps.configPath, AppConfigSchema.parse(config));
+  applyResolvedConfig(deps);
 }
 
 // ---------------------------------------------------------------------------
@@ -212,11 +214,9 @@ export function createProviderRoutes(deps: AdminDeps): Hono {
     if (parsed.data.disabled === true) {
       pool.disable(index);
     } else if (parsed.data.disabled === false) {
-      // Re-enable: reset health state for the key
-      const state = pool.getStatus(index);
-      if (state.status === "disabled") {
-        // KeyPool doesn't expose a direct enable, but we can note it
-        // The key will recover on next acquire cycle if within recovery interval
+      const enabled = pool.enable(index);
+      if (!enabled) {
+        return c.json({ error: "Revoked keys cannot be re-enabled" }, 400);
       }
     }
 

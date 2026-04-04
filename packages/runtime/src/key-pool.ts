@@ -132,6 +132,17 @@ export class KeyPool {
     return "disabled";
   }
 
+  enable(index: number): boolean {
+    const state = this.keyState[index];
+    if (!state || state.status === "revoked") {
+      return false;
+    }
+
+    state.status = "active";
+    state.disabledAt = null;
+    return true;
+  }
+
   getStatus(index: number): KeyHealthState {
     return this.keyState[index];
   }

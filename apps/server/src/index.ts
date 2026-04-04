@@ -1,16 +1,14 @@
 import process from "node:process";
 import { createServer } from "node:http";
 import type { Server, IncomingMessage, ServerResponse } from "node:http";
-import { join, extname } from "node:path";
-import { readFile, stat } from "node:fs/promises";
+import { dirname, extname, join, resolve } from "node:path";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
 import { Hono } from "hono";
 import { getRequestListener } from "@hono/node-server";
 
 import { resolveConfig } from "@meta-search/config";
-import type { ResolvedConfig } from "@meta-search/config";
-import { KeyPool, createKeyRevokedHandler, createPerfInstances } from "@meta-search/runtime";
-import type { PerfInstances } from "@meta-search/runtime";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
@@ -29,11 +27,11 @@ import {
 import type {
   RequestLogFilters as DbRequestLogFilters,
   AuditLogFilters as DbAuditLogFilters,
-  McpRequestLogEntry,
-  AuditLogEntry,
 } from "./db/index.js";
 import { createAdminRouter } from "./admin/router.js";
 import type { AdminDeps, DbHandle } from "./admin/types.js";
+import { resolveAppPath, resolveStaticAssetPath } from "./path-utils.js";
+import { buildRuntimeState } from "./runtime-state.js";
 
 // ---------------------------------------------------------------------------
 // Proxy Support
@@ -61,71 +59,8 @@ async function setupProxy(): Promise<void> {
 // Runtime State Initialization
 // ---------------------------------------------------------------------------
 
-function buildRuntimeState(config: ResolvedConfig): RuntimeState {
-  const healthOpts = {
-    recoveryIntervalMs: config.key_recovery_interval_ms,
-    maxDisableBeforeRevoke: config.max_disable_before_revoke,
-  };
-
-  const invalidKeysPath = join(process.cwd(), config.invalid_keys_file);
-  const onKeyRevoked = createKeyRevokedHandler(invalidKeysPath);
-
-  // Performance instances (conditionally created)
-  const perfConfig = config.performance;
-  const perf: PerfInstances | undefined =
-    (perfConfig.cache.enabled || perfConfig.circuitBreaker.enabled || perfConfig.singleFlight.enabled)
-      ? createPerfInstances(perfConfig)
-      : undefined;
-
-  return {
-    config,
-    perf,
-    tavilyKeyPool: new KeyPool({
-      providerName: "tavily",
-      keys: config.tavily?.api_keys ?? [],
-      strategy: config.key_rotation_strategy,
-      health: healthOpts,
-      onKeyRevoked,
-    }),
-    exaKeyPool: new KeyPool({
-      providerName: "exa",
-      keys: config.exa?.api_keys ?? [],
-      strategy: config.key_rotation_strategy,
-      health: healthOpts,
-      onKeyRevoked,
-    }),
-    perplexityKeyPool: new KeyPool({
-      providerName: "perplexity",
-      keys: config.perplexity?.api_keys ?? [],
-      strategy: config.key_rotation_strategy,
-      health: healthOpts,
-      onKeyRevoked,
-    }),
-    jinaKeyPool: new KeyPool({
-      providerName: "jina",
-      keys: config.jina?.api_keys ?? [],
-      strategy: config.key_rotation_strategy,
-      health: healthOpts,
-      onKeyRevoked,
-    }),
-    cloudflareKeyPool: new KeyPool({
-      providerName: "cloudflare",
-      keys: buildCloudflareCredentials(config),
-      strategy: config.key_rotation_strategy,
-      health: healthOpts,
-      onKeyRevoked,
-    }),
-    onKeyRevoked,
-  };
-}
-
-function buildCloudflareCredentials(config: ResolvedConfig): unknown[] {
-  if (!Array.isArray(config.cloudflare?.accounts)) return [];
-  return config.cloudflare.accounts.map((a) => ({
-    accountId: a.account_id,
-    token: a.api_token,
-  }));
-}
+const SERVER_MODULE_DIR = dirname(fileURLToPath(import.meta.url));
+const WORKSPACE_ROOT = resolve(SERVER_MODULE_DIR, "..", "..", "..");
 
 // ---------------------------------------------------------------------------
 // DB Handle Adapter
@@ -231,17 +166,24 @@ async function main(): Promise<void> {
   await setupProxy();
 
   // 2. Load config
-  const configPath = process.env.CONFIG_PATH ?? join(process.cwd(), "config.jsonc");
+  const configPath = resolveAppPath(
+    process.env.CONFIG_PATH ?? "config.jsonc",
+    WORKSPACE_ROOT,
+  );
+  const configDir = dirname(configPath);
   const config = resolveConfig(configPath);
 
   // 3. Build runtime state
-  const rt = buildRuntimeState(config);
+  const rt = buildRuntimeState(config, configDir);
 
   // 4. Build PAT snapshot
   const patSnapshot = buildPatSnapshot(config.pats);
 
   // 5. Initialize database
-  const dbPath = process.env.LOGS_DB_PATH ?? join(process.cwd(), "logs.db");
+  const dbPath = resolveAppPath(
+    process.env.LOGS_DB_PATH ?? "logs.db",
+    WORKSPACE_ROOT,
+  );
   initDatabase(dbPath);
   const dbHandle = createDbHandle();
 
@@ -294,7 +236,7 @@ async function main(): Promise<void> {
   const honoListener = getRequestListener(app.fetch);
 
   // 12. Determine WebUI static root
-  const webRoot = join(process.cwd(), "apps", "web", "public");
+  const webRoot = join(WORKSPACE_ROOT, "apps", "web", "public");
 
   // 13. Create a raw Node.js HTTP server that routes /mcp to the MCP
   //     transport, /app/* to static files, and everything else to Hono
@@ -336,16 +278,35 @@ async function main(): Promise<void> {
       // Serve static files for /app/*
       if (url.startsWith("/app")) {
         const subPath = url.slice("/app".length) || "/";
-        const filePath = join(webRoot, subPath === "/" ? "index.html" : subPath);
 
-        // Try serving the exact file; on missing file fall back to index.html (SPA)
         if (subPath !== "/" && extname(subPath)) {
+          const filePath = resolveStaticAssetPath(webRoot, subPath);
+          if (!filePath) {
+            res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+            res.end("Not found");
+            return;
+          }
+
           const served = await serveStaticFile(res, filePath);
-          if (served) return;
+          if (served) {
+            return;
+          }
+
+          res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("Not found");
+          return;
         }
 
         // SPA fallback: serve index.html
-        await serveStaticFile(res, join(webRoot, "index.html"));
+        const indexPath = resolveStaticAssetPath(webRoot, "/index.html");
+        const served =
+          indexPath !== null
+            ? await serveStaticFile(res, indexPath)
+            : false;
+        if (!served) {
+          res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("Admin UI assets are unavailable");
+        }
         return;
       }
 

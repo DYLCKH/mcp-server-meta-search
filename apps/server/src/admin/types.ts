@@ -1,7 +1,7 @@
-import type { Hono } from "hono";
 import type { ResolvedConfig } from "@meta-search/config";
 import type { KeyPool } from "@meta-search/runtime";
 import type { PatSnapshot } from "../middleware/pat-auth.js";
+import type { RuntimeState } from "../mcp/transport.js";
 
 // ---------------------------------------------------------------------------
 // DB Handle (provided by db module)
@@ -10,7 +10,7 @@ import type { PatSnapshot } from "../middleware/pat-auth.js";
 export interface DbHandle {
   queryRequestLogs(filters: RequestLogFilters): RequestLogEntry[];
   queryAuditLogs(filters: AuditLogFilters): AuditLogEntry[];
-  insertAuditLog(entry: Omit<AuditLogEntry, "id" | "created_at">): void;
+  insertAuditLog(entry: AuditLogWriteEntry): void;
 }
 
 export interface RequestLogFilters {
@@ -24,13 +24,15 @@ export interface RequestLogFilters {
 }
 
 export interface RequestLogEntry {
-  id: number;
+  id?: number;
+  timestamp?: string;
   tool: string;
-  provider: string;
-  status: string;
-  duration_ms: number;
-  key_index: number;
-  created_at: string;
+  provider?: string | null;
+  pat_name?: string | null;
+  status: "success" | "error";
+  latency_ms?: number | null;
+  error?: string | null;
+  attempts?: number;
 }
 
 export interface AuditLogFilters {
@@ -43,12 +45,20 @@ export interface AuditLogFilters {
 }
 
 export interface AuditLogEntry {
-  id: number;
+  id?: number;
+  timestamp?: string;
+  action: string;
+  actor?: string;
+  target_type?: string | null;
+  target_id?: string | null;
+  details?: string | null;
+}
+
+export interface AuditLogWriteEntry {
   action: string;
   target_type: string;
   target_name: string;
   detail: string | null;
-  created_at: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -66,14 +76,7 @@ export interface AdminDeps {
 }
 
 export interface RuntimeStateRef {
-  current: {
-    config: ResolvedConfig;
-    tavilyKeyPool: KeyPool;
-    exaKeyPool: KeyPool;
-    perplexityKeyPool: KeyPool;
-    jinaKeyPool: KeyPool;
-    cloudflareKeyPool: KeyPool;
-  };
+  current: RuntimeState;
 }
 
 export interface PatSnapshotRef {

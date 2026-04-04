@@ -29,26 +29,31 @@ export function createAdminRouter(deps: AdminDeps): Hono {
 
   // Providers
   const providerRoutes = createProviderRoutes(deps);
+  app.use("/providers", authMiddleware);
   app.use("/providers/*", authMiddleware);
   app.route("/providers", providerRoutes);
 
   // PATs
   const patRoutes = createPatRoutes(deps);
+  app.use("/pats", authMiddleware);
   app.use("/pats/*", authMiddleware);
   app.route("/pats", patRoutes);
 
   // Settings
   const settingsRoutes = createSettingsRoutes(deps);
+  app.use("/settings", authMiddleware);
   app.use("/settings/*", authMiddleware);
   app.route("/settings", settingsRoutes);
 
   // Logs
   const logRoutes = createLogRoutes(deps);
+  app.use("/logs", authMiddleware);
   app.use("/logs/*", authMiddleware);
   app.route("/logs", logRoutes);
 
   // Reload
   const reloadRoutes = createReloadRoutes(deps);
+  app.use("/reload", authMiddleware);
   app.use("/reload/*", authMiddleware);
   app.route("/reload", reloadRoutes);
 

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { writeConfigAtomic, loadConfig, AppConfigSchema } from "@meta-search/config";
 import type { AdminDeps } from "./types.js";
+import { applyResolvedConfig } from "../runtime-state.js";
 
 // ---------------------------------------------------------------------------
 // Validation schema
@@ -65,6 +66,7 @@ export function createSettingsRoutes(deps: AdminDeps): Hono {
     const validated = AppConfigSchema.parse(config);
 
     writeConfigAtomic(deps.configPath, validated);
+    const appliedConfig = applyResolvedConfig(deps);
 
     deps.db.insertAuditLog({
       action: "update_settings",
@@ -73,7 +75,16 @@ export function createSettingsRoutes(deps: AdminDeps): Hono {
       detail: JSON.stringify(parsed.data),
     });
 
-    return c.json({ ok: true });
+    return c.json({
+      ok: true,
+      settings: {
+        key_rotation_strategy: appliedConfig.key_rotation_strategy,
+        max_attempts_per_request: appliedConfig.max_attempts_per_request,
+        request_timeout_ms: appliedConfig.request_timeout_ms,
+        key_recovery_interval_ms: appliedConfig.key_recovery_interval_ms,
+        max_disable_before_revoke: appliedConfig.max_disable_before_revoke,
+      },
+    });
   });
 
   return app;

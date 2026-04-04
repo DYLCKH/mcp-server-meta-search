@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { writeConfigAtomic, loadConfig } from "@meta-search/config";
+import { writeConfigAtomic, loadConfig, AppConfigSchema } from "@meta-search/config";
 import { generatePat } from "@meta-search/runtime";
 import type { AdminDeps } from "./types.js";
+import { applyResolvedConfig } from "../runtime-state.js";
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -76,7 +77,8 @@ export function createPatRoutes(deps: AdminDeps): Hono {
       last_used_at: null,
     });
 
-    writeConfigAtomic(deps.configPath, config);
+    writeConfigAtomic(deps.configPath, AppConfigSchema.parse(config));
+    applyResolvedConfig(deps);
 
     deps.db.insertAuditLog({
       action: "create_pat",
@@ -149,7 +151,8 @@ export function createPatRoutes(deps: AdminDeps): Hono {
     if (parsed.data.note !== undefined) pat.note = parsed.data.note;
     if (parsed.data.expires_at !== undefined) pat.expires_at = parsed.data.expires_at;
 
-    writeConfigAtomic(deps.configPath, config);
+    writeConfigAtomic(deps.configPath, AppConfigSchema.parse(config));
+    applyResolvedConfig(deps);
 
     deps.db.insertAuditLog({
       action: "update_pat",
@@ -180,7 +183,8 @@ export function createPatRoutes(deps: AdminDeps): Hono {
       delete config.pats;
     }
 
-    writeConfigAtomic(deps.configPath, config);
+    writeConfigAtomic(deps.configPath, AppConfigSchema.parse(config));
+    applyResolvedConfig(deps);
 
     deps.db.insertAuditLog({
       action: "delete_pat",

@@ -20,8 +20,17 @@ export function createLogRoutes(deps: AdminDeps): Hono {
       offset: Math.max(parseInt(c.req.query("offset") ?? "0", 10), 0),
     };
 
-    const logs = deps.db.queryRequestLogs(filters);
-    return c.json({ logs, limit: filters.limit, offset: filters.offset });
+    const logs = deps.db.queryRequestLogs({
+      ...filters,
+      limit: filters.limit + 1,
+    });
+    const hasMore = logs.length > filters.limit;
+    return c.json({
+      logs: hasMore ? logs.slice(0, filters.limit) : logs,
+      limit: filters.limit,
+      offset: filters.offset,
+      hasMore,
+    });
   });
 
   // GET /audit - audit logs
@@ -35,8 +44,17 @@ export function createLogRoutes(deps: AdminDeps): Hono {
       offset: Math.max(parseInt(c.req.query("offset") ?? "0", 10), 0),
     };
 
-    const logs = deps.db.queryAuditLogs(filters);
-    return c.json({ logs, limit: filters.limit, offset: filters.offset });
+    const logs = deps.db.queryAuditLogs({
+      ...filters,
+      limit: filters.limit + 1,
+    });
+    const hasMore = logs.length > filters.limit;
+    return c.json({
+      logs: hasMore ? logs.slice(0, filters.limit) : logs,
+      limit: filters.limit,
+      offset: filters.offset,
+      hasMore,
+    });
   });
 
   return app;

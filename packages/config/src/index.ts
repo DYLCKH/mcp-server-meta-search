@@ -53,10 +53,10 @@ const PatRecordSchema = z.object({
   name: z.string(),
   prefix: z.string(),
   hash: z.string(),
-  encrypted: z.string().optional(),
+  encrypted: z.boolean().optional(),
   expires_at: z.string().nullable().optional(),
   disabled: z.boolean().optional(),
-  note: z.string().optional(),
+  note: z.string().nullable().optional(),
   created_at: z.string().optional(),
   last_used_at: z.string().nullable().optional(),
 });
