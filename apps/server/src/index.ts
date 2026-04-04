@@ -1,7 +1,8 @@
 import process from "node:process";
 import { createServer } from "node:http";
 import type { Server, IncomingMessage, ServerResponse } from "node:http";
-import { join } from "node:path";
+import { join, extname } from "node:path";
+import { readFile, stat } from "node:fs/promises";
 
 import { Hono } from "hono";
 import { getRequestListener } from "@hono/node-server";
@@ -13,8 +14,25 @@ import { KeyPool, createKeyRevokedHandler } from "@meta-search/runtime";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { buildPatSnapshot, validateBearerToken } from "./middleware/pat-auth.js";
+import type { PatSnapshot } from "./middleware/pat-auth.js";
 import { createMcpServer, createTransport } from "./mcp/transport.js";
 import type { RuntimeState } from "./mcp/transport.js";
+import {
+  initDatabase,
+  closeDatabase,
+  logAuditEvent,
+  queryRequestLogs,
+  queryAuditLogs,
+  getRequestStats,
+} from "./db/index.js";
+import type {
+  RequestLogFilters as DbRequestLogFilters,
+  AuditLogFilters as DbAuditLogFilters,
+  McpRequestLogEntry,
+  AuditLogEntry,
+} from "./db/index.js";
+import { createAdminRouter } from "./admin/router.js";
+import type { AdminDeps, DbHandle } from "./admin/types.js";
 
 // ---------------------------------------------------------------------------
 // Proxy Support
@@ -101,6 +119,60 @@ function buildCloudflareCredentials(config: ResolvedConfig): unknown[] {
 }
 
 // ---------------------------------------------------------------------------
+// DB Handle Adapter
+// ---------------------------------------------------------------------------
+
+function createDbHandle(): DbHandle {
+  return {
+    queryRequestLogs(filters) {
+      return queryRequestLogs(filters as DbRequestLogFilters);
+    },
+    queryAuditLogs(filters) {
+      return queryAuditLogs(filters as DbAuditLogFilters);
+    },
+    insertAuditLog(entry) {
+      logAuditEvent({
+        action: entry.action,
+        actor: "admin",
+        target_type: entry.target_type,
+        target_id: entry.target_name,
+        details: entry.detail,
+      });
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Static File Serving
+// ---------------------------------------------------------------------------
+
+const MIME_TYPES: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+  ".ico": "image/x-icon",
+};
+
+async function serveStaticFile(
+  res: ServerResponse,
+  filePath: string,
+): Promise<boolean> {
+  try {
+    const data = await readFile(filePath);
+    const ext = extname(filePath).toLowerCase();
+    const contentType = MIME_TYPES[ext] ?? "application/octet-stream";
+    res.writeHead(200, { "Content-Type": contentType });
+    res.end(data);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Startup Summary
 // ---------------------------------------------------------------------------
 
@@ -147,15 +219,33 @@ async function main(): Promise<void> {
   // 4. Build PAT snapshot
   const patSnapshot = buildPatSnapshot(config.pats);
 
-  // 5. Initialize MCP server and transport
+  // 5. Initialize database
+  const dbPath = process.env.LOGS_DB_PATH ?? join(process.cwd(), "logs.db");
+  initDatabase(dbPath);
+  const dbHandle = createDbHandle();
+
+  // 6. Initialize MCP server and transport
   const mcpServer = createMcpServer(rt);
   const transport = createTransport();
   await mcpServer.connect(transport);
 
-  // 6. Track readiness
+  // 7. Track readiness
   let ready = false;
 
-  // 7. Create Hono app for health endpoints and future routes
+  // 8. Create mutable refs for admin
+  const runtimeStateRef: { current: RuntimeState } = { current: rt };
+  const patSnapshotRef: { current: PatSnapshot } = { current: patSnapshot };
+
+  // 9. Create admin router
+  const adminDeps: AdminDeps = {
+    configPath,
+    runtimeState: runtimeStateRef,
+    patSnapshot: patSnapshotRef,
+    db: dbHandle,
+  };
+  const adminRouter = createAdminRouter(adminDeps);
+
+  // 10. Create Hono app
   const app = new Hono();
 
   app.get("/healthz", (c) => c.text("OK"));
@@ -167,17 +257,25 @@ async function main(): Promise<void> {
     return c.text("Not ready", 503);
   });
 
-  // 8. Create the Hono request listener
+  // Mount admin API routes
+  app.route("/api/admin", adminRouter);
+
+  // 11. Create the Hono request listener
   const honoListener = getRequestListener(app.fetch);
 
-  // 9. Create a raw Node.js HTTP server that routes /mcp to the MCP
-  //    transport and everything else to Hono
+  // 12. Determine WebUI static root
+  const webRoot = join(process.cwd(), "apps", "web", "public");
+
+  // 13. Create a raw Node.js HTTP server that routes /mcp to the MCP
+  //     transport, /app/* to static files, and everything else to Hono
   const server = createServer(
     async (req: IncomingMessage, res: ServerResponse) => {
+      const url = req.url?.split("?")[0] ?? "/";
+
       // Route MCP requests directly to the transport
-      if (req.url === "/mcp") {
+      if (url === "/mcp") {
         // PAT auth check
-        if (patSnapshot.hasPats) {
+        if (patSnapshotRef.current.hasPats) {
           const authHeader = req.headers.authorization;
           if (!authHeader?.startsWith("Bearer ")) {
             res.writeHead(401, { "Content-Type": "application/json" });
@@ -185,7 +283,7 @@ async function main(): Promise<void> {
             return;
           }
           const token = authHeader.slice(7);
-          if (!validateBearerToken(token, patSnapshot)) {
+          if (!validateBearerToken(token, patSnapshotRef.current)) {
             res.writeHead(401, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ error: "Unauthorized" }));
             return;
@@ -205,12 +303,28 @@ async function main(): Promise<void> {
         return;
       }
 
+      // Serve static files for /app/*
+      if (url.startsWith("/app")) {
+        const subPath = url.slice("/app".length) || "/";
+        const filePath = join(webRoot, subPath === "/" ? "index.html" : subPath);
+
+        // Try serving the exact file; on missing file fall back to index.html (SPA)
+        if (subPath !== "/" && extname(subPath)) {
+          const served = await serveStaticFile(res, filePath);
+          if (served) return;
+        }
+
+        // SPA fallback: serve index.html
+        await serveStaticFile(res, join(webRoot, "index.html"));
+        return;
+      }
+
       // Everything else goes to Hono
       honoListener(req, res);
     },
   );
 
-  // 10. Start listening
+  // 14. Start listening
   const port = parseInt(process.env.PORT ?? "3000", 10);
   const hostname = process.env.HOST ?? "0.0.0.0";
 
@@ -218,12 +332,15 @@ async function main(): Promise<void> {
     ready = true;
     printStartupSummary(rt);
     process.stderr.write(
+      `[meta-search] Admin: http://${hostname}:${port}/app\n`,
+    );
+    process.stderr.write(
       `[meta-search] Listening on http://${hostname}:${port}\n`,
     );
     process.stderr.write("[meta-search] Ready.\n");
   });
 
-  // 11. Graceful shutdown
+  // 15. Graceful shutdown
   setupGracefulShutdown(server, mcpServer);
 }
 
@@ -238,6 +355,14 @@ function setupGracefulShutdown(
     shuttingDown = true;
 
     process.stderr.write("[meta-search] Shutting down...\n");
+
+    // Close database
+    try {
+      closeDatabase();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`[meta-search] Error closing database: ${msg}\n`);
+    }
 
     // Stop accepting new connections
     server.close(() => {
