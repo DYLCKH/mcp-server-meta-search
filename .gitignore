@@ -3,3 +3,6 @@ node_modules/
 .env
 config.jsonc
 invalid-keys.json
+dist/
+*.tsbuildinfo
+.turbo/

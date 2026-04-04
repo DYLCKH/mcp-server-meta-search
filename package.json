@@ -1,7 +1,18 @@
 {
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.27.1",
-    "undici": "^7.22.0",
-    "zod": "^4.3.6"
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.8.1",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "dev": "pnpm --filter @meta-search/server dev",
+    "clean": "pnpm -r exec rm -rf dist"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "tsup": "^8.4.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2"
   }
 }

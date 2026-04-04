@@ -1,0 +1,29 @@
+{
+  "name": "@meta-search/server",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@meta-search/shared": "workspace:*",
+    "@meta-search/config": "workspace:*",
+    "@meta-search/runtime": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "hono": "^4.7.9",
+    "@hono/node-server": "^1.14.1",
+    "undici": "^7.22.0",
+    "zod": "^4.3.6"
+  }
+}
