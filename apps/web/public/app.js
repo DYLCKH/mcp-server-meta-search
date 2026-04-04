@@ -1,6 +1,97 @@
 // API Client
 const API_BASE = '/api/admin';
 
+function ensureArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function buildQueryString(params = {}) {
+  const searchParams = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === '') {
+      continue;
+    }
+    searchParams.set(key, String(value));
+  }
+
+  const query = searchParams.toString();
+  return query ? `?${query}` : '';
+}
+
+function normalizeProviderSummary(provider) {
+  const active = provider.activeKeys ?? provider.active ?? 0;
+  const disabled = provider.disabledKeys ?? provider.disabled ?? 0;
+  const revoked = provider.revokedKeys ?? provider.revoked ?? 0;
+
+  return {
+    ...provider,
+    name: provider.name,
+    total: provider.total ?? active + disabled + revoked,
+    active,
+    disabled,
+    revoked,
+    activeKeys: active,
+    disabledKeys: disabled,
+    revokedKeys: revoked,
+  };
+}
+
+function normalizeProviderSummaries(payload) {
+  if (Array.isArray(payload?.providers)) {
+    return payload.providers.map(normalizeProviderSummary);
+  }
+
+  return Object.entries(payload?.providers || {}).map(([name, provider]) =>
+    normalizeProviderSummary({ name, ...provider }),
+  );
+}
+
+function normalizeProviderKey(key) {
+  const status =
+    key.status ??
+    key.health?.status ??
+    (key.enabled === false ? 'disabled' : 'active');
+
+  return {
+    ...key,
+    status,
+    enabled: status === 'active',
+    masked: key.masked ?? key.hint ?? key.key ?? '***',
+    lastUsed: key.lastUsed ?? key.last_used_at ?? null,
+  };
+}
+
+function normalizePat(pat) {
+  const disabled = pat.disabled ?? pat.enabled === false;
+
+  return {
+    ...pat,
+    disabled,
+    enabled: !disabled,
+    createdAt: pat.createdAt ?? pat.created_at ?? null,
+    lastUsedAt: pat.lastUsedAt ?? pat.last_used_at ?? null,
+    expiresAt: pat.expiresAt ?? pat.expires_at ?? null,
+  };
+}
+
+function normalizeRequestLog(log) {
+  return {
+    ...log,
+    createdAt: log.createdAt ?? log.created_at ?? log.timestamp ?? null,
+    latency: log.latency ?? log.latency_ms ?? log.durationMs ?? log.duration_ms ?? null,
+  };
+}
+
+function normalizeAuditLog(log) {
+  return {
+    ...log,
+    createdAt: log.createdAt ?? log.created_at ?? log.timestamp ?? null,
+    target: log.target ?? log.target_id ?? log.target_name ?? log.target_type ?? '-',
+    detail: log.detail ?? log.details ?? null,
+  };
+}
+
 const api = {
   async request(path, options = {}) {
     const res = await fetch(`${API_BASE}${path}`, {
@@ -23,21 +114,78 @@ const api = {
   login: (password) => api.request('/auth/login', { method: 'POST', body: JSON.stringify({ password }) }),
 
   // Dashboard
-  getDashboard: () => api.request('/dashboard'),
+  async getDashboard() {
+    const data = await api.request('/dashboard');
+    return {
+      ...data,
+      providers: normalizeProviderSummaries(data),
+      patCount: data.patCount ?? data.pat_count ?? 0,
+    };
+  },
 
   // Providers
-  getProviders: () => api.request('/providers'),
-  getProvider: (name) => api.request(`/providers/${encodeURIComponent(name)}`),
-  addKey: (name, key) => api.request(`/providers/${encodeURIComponent(name)}/keys`, { method: 'POST', body: JSON.stringify({ key }) }),
-  updateKey: (name, index, data) => api.request(`/providers/${encodeURIComponent(name)}/keys/${index}`, { method: 'PUT', body: JSON.stringify(data) }),
+  async getProviders() {
+    const data = await api.request('/providers');
+    return { ...data, providers: normalizeProviderSummaries(data) };
+  },
+  async getProvider(name) {
+    const data = await api.request(`/providers/${encodeURIComponent(name)}`);
+    return {
+      ...data,
+      keys: ensureArray(data.keys).map(normalizeProviderKey),
+    };
+  },
+  addKey: (name, key) =>
+    api.request(`/providers/${encodeURIComponent(name)}/keys`, {
+      method: 'POST',
+      body: JSON.stringify({ api_key: key }),
+    }),
+  updateKey: (name, index, data) => {
+    const payload = Object.prototype.hasOwnProperty.call(data, 'enabled')
+      ? { disabled: !data.enabled }
+      : data;
+
+    return api.request(`/providers/${encodeURIComponent(name)}/keys/${index}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
   deleteKey: (name, index) => api.request(`/providers/${encodeURIComponent(name)}/keys/${index}`, { method: 'DELETE' }),
 
   // PATs
-  getPats: () => api.request('/pats'),
-  createPat: (data) => api.request('/pats', { method: 'POST', body: JSON.stringify(data) }),
-  getPat: (name) => api.request(`/pats/${encodeURIComponent(name)}`),
+  async getPats() {
+    const data = await api.request('/pats');
+    return { ...data, pats: ensureArray(data.pats).map(normalizePat) };
+  },
+  createPat: (data) =>
+    api.request('/pats', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: data.name,
+        note: data.note,
+        expires_at: data.expiresAt ?? data.expires_at,
+      }),
+    }),
+  async getPat(name) {
+    const data = await api.request(`/pats/${encodeURIComponent(name)}`);
+    return normalizePat(data);
+  },
   revealPat: (name) => api.request(`/pats/${encodeURIComponent(name)}/reveal`, { method: 'POST' }),
-  updatePat: (name, data) => api.request(`/pats/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify(data) }),
+  updatePat: (name, data) => {
+    const payload = { ...data };
+    if (Object.prototype.hasOwnProperty.call(payload, 'enabled')) {
+      payload.disabled = !payload.enabled;
+      delete payload.enabled;
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, 'expiresAt')) {
+      payload.expires_at = payload.expiresAt;
+      delete payload.expiresAt;
+    }
+    return api.request(`/pats/${encodeURIComponent(name)}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
   deletePat: (name) => api.request(`/pats/${encodeURIComponent(name)}`, { method: 'DELETE' }),
 
   // Settings
@@ -45,8 +193,26 @@ const api = {
   saveSettings: (data) => api.request('/settings', { method: 'PUT', body: JSON.stringify(data) }),
 
   // Logs
-  getRequestLogs: (params = {}) => api.request(`/logs/requests?${new URLSearchParams(params)}`),
-  getAuditLogs: (params = {}) => api.request(`/logs/audit?${new URLSearchParams(params)}`),
+  async getRequestLogs(params = {}) {
+    const data = await api.request(`/logs/requests${buildQueryString(params)}`);
+    return {
+      ...data,
+      logs: ensureArray(data.logs).map(normalizeRequestLog),
+    };
+  },
+  async getAuditLogs(params = {}) {
+    const query = { ...params };
+    if (Object.prototype.hasOwnProperty.call(query, 'target')) {
+      query.target_type = query.target;
+      delete query.target;
+    }
+
+    const data = await api.request(`/logs/audit${buildQueryString(query)}`);
+    return {
+      ...data,
+      logs: ensureArray(data.logs).map(normalizeAuditLog),
+    };
+  },
 };
 
 // Simple state

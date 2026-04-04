@@ -110,7 +110,7 @@ async function loadProviderDetails(container, api, name) {
               ${key.lastUsed ? `<span class="text-muted" style="font-size:12px">last used ${formatDate(key.lastUsed)}</span>` : ''}
             </div>
             <div class="key-actions">
-              <button class="btn btn-sm" data-action="toggle-key" data-provider="${escapeHtml(name)}" data-index="${i}" data-enabled="${!!key.enabled}">
+              <button class="btn btn-sm" data-action="toggle-key" data-provider="${escapeHtml(name)}" data-index="${i}" data-enabled="${!!key.enabled}" ${key.status === 'revoked' ? 'disabled' : ''}>
                 ${key.enabled ? 'Disable' : 'Enable'}
               </button>
               <button class="btn btn-sm btn-danger" data-action="delete-key" data-provider="${escapeHtml(name)}" data-index="${i}">Delete</button>
@@ -125,14 +125,26 @@ async function loadProviderDetails(container, api, name) {
 }
 
 function showAddKeyModal(modalRoot, api, provider, onDone) {
+  const isCloudflare = provider === 'cloudflare';
   modalRoot.innerHTML = `
     <div class="modal-overlay" id="add-key-modal">
       <div class="modal">
         <h2>Add API Key for ${escapeHtml(provider)}</h2>
-        <div class="form-group">
-          <label for="new-key-input">API Key</label>
-          <input type="text" id="new-key-input" placeholder="Enter API key" autofocus>
-        </div>
+        ${isCloudflare ? `
+          <div class="form-group">
+            <label for="cf-account-id">Account ID</label>
+            <input type="text" id="cf-account-id" placeholder="Enter Cloudflare account ID" autofocus>
+          </div>
+          <div class="form-group">
+            <label for="cf-api-token">API Token</label>
+            <input type="text" id="cf-api-token" placeholder="Enter Cloudflare API token">
+          </div>
+        ` : `
+          <div class="form-group">
+            <label for="new-key-input">API Key</label>
+            <input type="text" id="new-key-input" placeholder="Enter API key" autofocus>
+          </div>
+        `}
         <div class="modal-actions">
           <button class="btn" id="modal-cancel">Cancel</button>
           <button class="btn btn-primary" id="modal-confirm">Add Key</button>
@@ -143,13 +155,28 @@ function showAddKeyModal(modalRoot, api, provider, onDone) {
 
   const overlay = modalRoot.querySelector('#add-key-modal');
   const input = modalRoot.querySelector('#new-key-input');
+  const accountIdInput = modalRoot.querySelector('#cf-account-id');
+  const apiTokenInput = modalRoot.querySelector('#cf-api-token');
 
   modalRoot.querySelector('#modal-cancel').addEventListener('click', () => { modalRoot.innerHTML = ''; });
   overlay.addEventListener('click', (e) => { if (e.target === overlay) modalRoot.innerHTML = ''; });
 
   modalRoot.querySelector('#modal-confirm').addEventListener('click', async () => {
-    const key = input.value.trim();
-    if (!key) { input.focus(); return; }
+    const key = isCloudflare
+      ? {
+          account_id: accountIdInput.value.trim(),
+          api_token: apiTokenInput.value.trim(),
+        }
+      : input.value.trim();
+
+    if (isCloudflare) {
+      if (!key.account_id) { accountIdInput.focus(); return; }
+      if (!key.api_token) { apiTokenInput.focus(); return; }
+    } else if (!key) {
+      input.focus();
+      return;
+    }
+
     try {
       await api.addKey(provider, key);
       modalRoot.innerHTML = '';
@@ -159,8 +186,12 @@ function showAddKeyModal(modalRoot, api, provider, onDone) {
     }
   });
 
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') modalRoot.querySelector('#modal-confirm').click();
+  [input, accountIdInput, apiTokenInput].filter(Boolean).forEach((field) => {
+    field.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        modalRoot.querySelector('#modal-confirm').click();
+      }
+    });
   });
 }
 

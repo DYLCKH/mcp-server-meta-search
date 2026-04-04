@@ -12,18 +12,9 @@ export function render() {
 export async function init(root, api, state, navigate) {
   const container = root.querySelector('#settings-content');
   let originalSettings = {};
+  let saveMessage = '';
 
-  try {
-    const data = await api.getSettings();
-    originalSettings = data.settings || data;
-    container.innerHTML = renderSettingsForm(originalSettings);
-  } catch (err) {
-    container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
-    return;
-  }
-
-  // Save
-  container.querySelector('#settings-save').addEventListener('click', async () => {
+  function collectSettings() {
     const form = container.querySelector('#settings-form');
     const formData = new FormData(form);
     const settings = {};
@@ -32,26 +23,54 @@ export async function init(root, api, state, navigate) {
       settings[key] = parseValue(value);
     }
 
-    const btn = container.querySelector('#settings-save');
-    btn.disabled = true;
-    btn.textContent = 'Saving...';
+    return settings;
+  }
 
-    try {
-      const result = await api.saveSettings(settings);
-      originalSettings = result.settings || settings;
-      container.innerHTML = renderSettingsForm(originalSettings);
-      container.querySelector('.alert-area').innerHTML = '<div class="alert alert-success">Settings saved.</div>';
-    } catch (err) {
-      container.querySelector('.alert-area').innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
-      btn.disabled = false;
-      btn.textContent = 'Save';
-    }
-  });
+  function bindForm() {
+    container.querySelector('#settings-save').addEventListener('click', async () => {
+      const settings = collectSettings();
+      const btn = container.querySelector('#settings-save');
+      const alertArea = container.querySelector('.alert-area');
 
-  // Revert
-  container.querySelector('#settings-revert').addEventListener('click', () => {
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+      alertArea.innerHTML = '';
+
+      try {
+        const result = await api.saveSettings(settings);
+        originalSettings = result.settings || settings;
+        saveMessage = '<div class="alert alert-success">Settings saved.</div>';
+        renderSettings();
+      } catch (err) {
+        alertArea.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+        btn.disabled = false;
+        btn.textContent = 'Save';
+      }
+    });
+
+    container.querySelector('#settings-revert').addEventListener('click', () => {
+      saveMessage = '';
+      renderSettings();
+    });
+  }
+
+  function renderSettings() {
     container.innerHTML = renderSettingsForm(originalSettings);
-  });
+    if (saveMessage) {
+      container.querySelector('.alert-area').innerHTML = saveMessage;
+      saveMessage = '';
+    }
+    bindForm();
+  }
+
+  try {
+    const data = await api.getSettings();
+    originalSettings = data.settings || data;
+    renderSettings();
+  } catch (err) {
+    container.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+    return;
+  }
 }
 
 function renderSettingsForm(settings) {

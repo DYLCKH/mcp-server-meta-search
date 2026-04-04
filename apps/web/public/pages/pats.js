@@ -124,18 +124,9 @@ async function handleReveal(container, api, name) {
     const data = await api.revealPat(name);
     area.innerHTML = `
       <div class="alert alert-warning mt-4">
-        <strong>Warning:</strong> This token will only be shown once. Copy it now.
-        <div class="key-value mt-2">
-          <code style="flex:1">${escapeHtml(data.token)}</code>
-          <button class="btn btn-sm" id="copy-pat-btn">Copy</button>
-        </div>
+        <strong>Reveal unavailable:</strong> ${escapeHtml(data.message || 'Full tokens are only returned when the PAT is created.')}
       </div>
     `;
-    area.querySelector('#copy-pat-btn').addEventListener('click', () => {
-      navigator.clipboard.writeText(data.token).then(() => {
-        area.querySelector('#copy-pat-btn').textContent = 'Copied!';
-      });
-    });
   } catch (err) {
     area.innerHTML = `<div class="alert alert-error mt-4">${escapeHtml(err.message)}</div>`;
   }
