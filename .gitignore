@@ -1,6 +1,8 @@
 node_modules/
 dist/
 *.db
+*.db-shm
+*.db-wal
 *.tsbuildinfo
 .turbo/
 .worktrees/
@@ -11,3 +13,4 @@ dist/
 Thumbs.db
 config.jsonc
 invalid-keys.json
+package-lock.json
