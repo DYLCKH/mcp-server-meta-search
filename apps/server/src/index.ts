@@ -281,11 +281,10 @@ async function main(): Promise<void> {
   app.get("/metrics", (c) => {
     const metrics = runtimeStateRef.current.perf?.metrics;
     if (!metrics) {
-      return c.text("", 200);
+      return c.text("", 200, { "Content-Type": "text/plain; version=0.0.4; charset=utf-8" });
     }
     const text = metrics.getPrometheusMetrics();
-    c.header("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
-    return c.text(text, 200);
+    return c.text(text, 200, { "Content-Type": "text/plain; version=0.0.4; charset=utf-8" });
   });
 
   // Mount admin API routes

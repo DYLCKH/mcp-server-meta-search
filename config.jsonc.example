@@ -1,4 +1,12 @@
 {
+  // =========================================================================
+  // Meta Search MCP Server - Configuration
+  // =========================================================================
+  // Format: JSONC (JSON with // line comments).
+  // All fields are optional unless marked required. Defaults are shown below.
+  // Env var overrides: double-underscore nesting, e.g. TAVILY__API_KEYS
+  // =========================================================================
+
   // === Provider API Keys ===
 
   // Tavily (https://tavily.com)
@@ -32,10 +40,10 @@
   // Required API Token permissions:
   //   Scope:      Account
   //   Resource:   Browser Rendering
-  //   Permission: Edit          ← "Read" will NOT work (returns 401)
+  //   Permission: Edit          <- "Read" will NOT work (returns 401)
   //
   // Create at: https://dash.cloudflare.com/profile/api-tokens
-  //   → "Create Custom Token" → Account / Browser Rendering / Edit
+  //   -> "Create Custom Token" -> Account / Browser Rendering / Edit
   "cloudflare": {
     "accounts": [
       { "account_id": "your-cf-account-id", "api_token": "your-cf-api-token" }
@@ -48,7 +56,7 @@
   // Key rotation strategy: "round_robin" (default) or "random"
   "key_rotation_strategy": "round_robin",
 
-  // Max retry attempts per request (0 = auto, uses pool size)
+  // Max retry attempts per request (0 = try each key once)
   "max_attempts_per_request": 0,
 
   // Request timeout in milliseconds
@@ -56,14 +64,81 @@
 
   // === Key Health Tracking ===
 
-  // Time (ms) before a disabled key is re-enabled for retry (default: 300000 = 5 min)
+  // Time (ms) before a disabled key is re-enabled for retry (default: 5 min)
   "key_recovery_interval_ms": 300000,
 
   // Cumulative disable count before a key is permanently revoked (default: 3)
-  // When a key is disabled and recovered multiple times, hitting this threshold
-  // moves it to invalid-keys.json and permanently removes it from the pool.
   "max_disable_before_revoke": 3,
 
-  // File path for recording revoked keys (relative to script directory)
-  "invalid_keys_file": "invalid-keys.json"
+  // File path for recording revoked keys (relative to working directory)
+  "invalid_keys_file": "invalid-keys.json",
+
+  // === Authentication ===
+
+  // Admin panel credentials & session settings.
+  // Alternatively, set ADMIN_PASSWORD and ADMIN_SESSION_SECRET env vars.
+  "admin": {
+    // SHA-256 hash of the admin password.
+    // Generate: node -e "console.log(require('crypto').createHash('sha256').update('your-password').digest('hex'))"
+    "password_hash": "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8",
+
+    // Secret used to sign session cookies. Must be at least 32 characters.
+    // Generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+    "session_secret": "change-me-to-a-random-string-at-least-32-characters-long",
+
+    // Session TTL in milliseconds (default: 24 hours)
+    "session_ttl_ms": 86400000
+  },
+
+  // === Personal Access Tokens (PATs) ===
+  // Used for authenticating MCP tool calls via Bearer token.
+  // Tokens are created via the Admin API (POST /api/admin/pats) and stored
+  // as hashes. This array is managed automatically -- do not edit by hand
+  // unless you know what you are doing.
+
+  // "pats": [
+  //   {
+  //     "name": "my-agent",
+  //     "prefix": "ms_pat_",
+  //     "hash": "<sha256-hash>",
+  //     "encrypted": false,
+  //     "disabled": false,
+  //     "note": "Token for my AI agent",
+  //     "expires_at": null,
+  //     "created_at": "2025-01-01T00:00:00.000Z",
+  //     "last_used_at": null
+  //   }
+  // ],
+
+  // === Performance Tuning ===
+  // All performance features are enabled by default with sensible defaults.
+  // Disable individual features by setting enabled: false.
+
+  "performance": {
+    // Response cache: caches successful GET-like results in memory
+    "cache": {
+      "enabled": true,
+      "maxSize": 512,          // Max cached entries
+      "defaultTtlMs": 60000    // Cache TTL (60 seconds)
+    },
+
+    // Concurrency limiter: caps in-flight provider requests
+    "concurrency": {
+      "maxConcurrency": 8,     // Max parallel provider requests
+      "maxQueueSize": 64,      // Max queued requests before rejecting
+      "queueTimeoutMs": 30000  // Max wait time in queue
+    },
+
+    // Circuit breaker: trips after repeated failures to avoid cascading errors
+    "circuitBreaker": {
+      "enabled": true,
+      "failureThreshold": 5,   // Failures before circuit opens
+      "resetTimeoutMs": 30000  // Time before attempting to close circuit
+    },
+
+    // Single-flight: deduplicates concurrent identical requests
+    "singleFlight": {
+      "enabled": true
+    }
+  }
 }
