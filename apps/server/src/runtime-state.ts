@@ -7,6 +7,8 @@ import type { AdminDeps } from "./admin/types.js";
 import type { RuntimeState } from "./mcp/transport.js";
 import { resolveAppPath } from "./path-utils.js";
 
+type RevokedHandler = RuntimeState["onKeyRevoked"];
+
 function buildCloudflareCredentials(config: ResolvedConfig): unknown[] {
   if (!Array.isArray(config.cloudflare?.accounts)) return [];
   return config.cloudflare.accounts.map((account) => ({
@@ -15,63 +17,67 @@ function buildCloudflareCredentials(config: ResolvedConfig): unknown[] {
   }));
 }
 
+function createProviderKeyPool(
+  config: ResolvedConfig,
+  providerName: string,
+  keys: unknown[],
+  onKeyRevoked: RevokedHandler,
+): KeyPool {
+  return new KeyPool({
+    providerName,
+    keys,
+    strategy: config.key_rotation_strategy,
+    health: {
+      recoveryIntervalMs: config.key_recovery_interval_ms,
+      maxDisableBeforeRevoke: config.max_disable_before_revoke,
+    },
+    onKeyRevoked,
+  });
+}
+
 export function buildRuntimeState(
   config: ResolvedConfig,
   configDir: string,
 ): RuntimeState {
-  const healthOpts = {
-    recoveryIntervalMs: config.key_recovery_interval_ms,
-    maxDisableBeforeRevoke: config.max_disable_before_revoke,
-  };
-
   const invalidKeysPath = resolveAppPath(config.invalid_keys_file, configDir);
   const onKeyRevoked = createKeyRevokedHandler(invalidKeysPath);
-  const perfConfig = config.performance;
-  const perf =
-    perfConfig.cache.enabled ||
-    perfConfig.circuitBreaker.enabled ||
-    perfConfig.singleFlight.enabled
-      ? createPerfInstances(perfConfig)
-      : undefined;
+  // Concurrency limiting has no separate enable switch, so the perf container
+  // must always exist even when cache/circuit/single-flight are disabled.
+  const perf = createPerfInstances(config.performance);
 
   return {
     config,
     perf,
-    tavilyKeyPool: new KeyPool({
-      providerName: "tavily",
-      keys: config.tavily?.api_keys ?? [],
-      strategy: config.key_rotation_strategy,
-      health: healthOpts,
+    tavilyKeyPool: createProviderKeyPool(
+      config,
+      "tavily",
+      config.tavily?.api_keys ?? [],
       onKeyRevoked,
-    }),
-    exaKeyPool: new KeyPool({
-      providerName: "exa",
-      keys: config.exa?.api_keys ?? [],
-      strategy: config.key_rotation_strategy,
-      health: healthOpts,
+    ),
+    exaKeyPool: createProviderKeyPool(
+      config,
+      "exa",
+      config.exa?.api_keys ?? [],
       onKeyRevoked,
-    }),
-    perplexityKeyPool: new KeyPool({
-      providerName: "perplexity",
-      keys: config.perplexity?.api_keys ?? [],
-      strategy: config.key_rotation_strategy,
-      health: healthOpts,
+    ),
+    perplexityKeyPool: createProviderKeyPool(
+      config,
+      "perplexity",
+      config.perplexity?.api_keys ?? [],
       onKeyRevoked,
-    }),
-    jinaKeyPool: new KeyPool({
-      providerName: "jina",
-      keys: config.jina?.api_keys ?? [],
-      strategy: config.key_rotation_strategy,
-      health: healthOpts,
+    ),
+    jinaKeyPool: createProviderKeyPool(
+      config,
+      "jina",
+      config.jina?.api_keys ?? [],
       onKeyRevoked,
-    }),
-    cloudflareKeyPool: new KeyPool({
-      providerName: "cloudflare",
-      keys: buildCloudflareCredentials(config),
-      strategy: config.key_rotation_strategy,
-      health: healthOpts,
+    ),
+    cloudflareKeyPool: createProviderKeyPool(
+      config,
+      "cloudflare",
+      buildCloudflareCredentials(config),
       onKeyRevoked,
-    }),
+    ),
     onKeyRevoked,
   };
 }

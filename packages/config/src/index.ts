@@ -1,7 +1,12 @@
-import { readFileSync, writeFileSync, renameSync, existsSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { join, dirname } from "node:path";
 import { randomUUID } from "node:crypto";
-import process from "node:process";
 import { z } from "zod";
 
 // ---------------------------------------------------------------------------
@@ -196,43 +201,6 @@ export function loadConfig(configPath: string): AppConfig {
 }
 
 // ---------------------------------------------------------------------------
-// Env Overrides
-// ---------------------------------------------------------------------------
-
-/**
- * Apply environment variable overrides to a config object.
- * Mapping: double-underscore separates nesting levels, all lowercased.
- *   TAVILY__API_KEYS → config.tavily.api_keys
- *   CLOUDFLARE__BASE_URL → config.cloudflare.base_url
- * Values are JSON.parse'd if possible, otherwise kept as strings.
- */
-export function applyEnvOverrides<T extends Record<string, unknown>>(config: T): T {
-  for (const [envKey, envVal] of Object.entries(process.env)) {
-    if (!envKey.includes("__") || envVal === undefined) continue;
-
-    const segments = envKey.toLowerCase().split("__");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let target: any = config;
-    for (let i = 0; i < segments.length - 1; i++) {
-      if (target[segments[i]] === undefined || typeof target[segments[i]] !== "object") {
-        target[segments[i]] = {};
-      }
-      target = target[segments[i]];
-    }
-
-    const leafKey = segments.at(-1)!;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(envVal);
-    } catch {
-      parsed = envVal;
-    }
-    target[leafKey] = parsed;
-  }
-  return config;
-}
-
-// ---------------------------------------------------------------------------
 // Atomic Config Write
 // ---------------------------------------------------------------------------
 
@@ -250,7 +218,7 @@ export function writeConfigAtomic(configPath: string, config: unknown): void {
   if (existsSync(configPath)) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const backupPath = join(dir, `config.${timestamp}.bak`);
-    writeFileSync(backupPath, readFileSync(configPath, "utf-8"), "utf-8");
+    copyFileSync(configPath, backupPath);
   }
 
   // Write to temp file then atomic rename
@@ -264,14 +232,11 @@ export function writeConfigAtomic(configPath: string, config: unknown): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Load config from file, apply env overrides, validate, and fill defaults.
+ * Load config from file, validate it, and fill defaults for omitted fields.
  * This is the main entry point for consumers that need a fully-resolved config.
  */
 export function resolveConfig(configPath: string): ResolvedConfig {
-  let config = loadConfig(configPath);
-  config = applyEnvOverrides(config);
-  // Re-validate after env overrides
-  config = AppConfigSchema.parse(config);
+  const config = loadConfig(configPath);
 
   const result: ResolvedConfig = {
     tavily: config.tavily,

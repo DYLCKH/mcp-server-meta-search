@@ -7,7 +7,7 @@ Built as a modular monolith:
 ```
 packages/
   shared/    -- shared utilities (schemas, helpers)
-  config/    -- JSONC config loading, validation, env overrides
+  config/    -- JSONC config loading, validation, atomic writes
   runtime/   -- key pool, rotation, performance middleware
 apps/
   server/    -- HTTP server, MCP transport, admin API, DB layer
@@ -76,8 +76,7 @@ The server uses **JSONC** (`config.jsonc`) as its primary configuration format. 
 ### Config Resolution Order
 
 1. Load `config.jsonc` (path from `CONFIG_PATH` env var, defaults to `./config.jsonc`)
-2. Apply environment variable overrides (double-underscore nesting)
-3. Environment variables always take priority over file values
+2. Validate the file and apply built-in defaults for omitted fields
 
 ### Environment Variables
 
@@ -90,29 +89,6 @@ The server uses **JSONC** (`config.jsonc`) as its primary configuration format. 
 | `PORT` | `3000` | HTTP listen port |
 | `HOST` | `0.0.0.0` | HTTP listen address |
 | `NODE_ENV` | — | Set to `production` for secure cookies |
-
-#### Admin Authentication
-
-| Env Var | Description |
-|---------|-------------|
-| `ADMIN_PASSWORD` | Plaintext password (auto-hashed on first use if `admin.password_hash` not set) |
-| `ADMIN_SESSION_SECRET` | Secret for signing session cookies (required for admin login) |
-
-#### Provider Overrides
-
-Environment variables map to config fields using `__` as the nesting separator. Values are JSON-parsed when possible:
-
-| Env Var | Config Field |
-|---------|-------------|
-| `TAVILY__API_KEYS` | `tavily.api_keys` |
-| `EXA__API_KEYS` | `exa.api_keys` |
-| `PERPLEXITY__API_KEYS` | `perplexity.api_keys` |
-| `JINA__API_KEYS` | `jina.api_keys` |
-| `JINA__BASE_URL` | `jina.base_url` |
-| `CLOUDFLARE__ACCOUNTS` | `cloudflare.accounts` |
-| `KEY_ROTATION_STRATEGY` | `key_rotation_strategy` |
-
-Array values must be JSON-encoded: `TAVILY__API_KEYS='["key1","key2"]'`
 
 ### All Config Fields
 
@@ -165,7 +141,9 @@ Manage PATs through the Admin API or WebUI.
 
 ### Admin Panel (Session)
 
-The admin panel uses cookie-based session authentication. Set `admin.password_hash` in config or `ADMIN_PASSWORD` env var to enable login.
+The admin panel uses cookie-based session authentication. Set
+`admin.password_hash` and `admin.session_secret` in `config.jsonc` to enable
+login.
 
 ## MCP Tools
 
@@ -391,7 +369,7 @@ Admin flow:
 | Package | Purpose |
 |---------|---------|
 | `@meta-search/shared` | Zod schemas, utility functions (compactObject, maskKey, etc.) |
-| `@meta-search/config` | JSONC parser, config loading, env overrides, atomic writes |
+| `@meta-search/config` | JSONC parser, config loading, validation, atomic writes |
 | `@meta-search/runtime` | KeyPool, key rotation, performance middleware (cache, circuit breaker, single-flight, limiter, metrics) |
 
 ### Apps

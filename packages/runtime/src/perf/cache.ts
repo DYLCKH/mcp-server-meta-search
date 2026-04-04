@@ -18,7 +18,6 @@ interface CacheStats {
 
 export class ResultCache {
   private entries = new Map<string, CacheEntry>();
-  private accessOrder: string[] = [];
   private _hits = 0;
   private _misses = 0;
   private _evictions = 0;
@@ -37,19 +36,22 @@ export class ResultCache {
 
     if (Date.now() >= entry.expiresAt) {
       this.entries.delete(key);
-      this.removeFromAccessOrder(key);
       this._misses++;
       return { hit: false };
     }
 
-    // Move to end (most recently used)
-    this.removeFromAccessOrder(key);
-    this.accessOrder.push(key);
+    // Refresh insertion order so Map keeps most-recently-used keys at the end.
+    this.entries.delete(key);
+    this.entries.set(key, entry);
     this._hits++;
     return { data: entry.data, hit: true };
   }
 
   set(key: string, data: unknown, ttlMs?: number): void {
+    if (this.config.maxSize <= 0) {
+      return;
+    }
+
     // Determine TTL: per-key prefix match > default
     let resolvedTtl = this.config.defaultTtlMs;
     if (ttlMs !== undefined) {
@@ -63,31 +65,21 @@ export class ResultCache {
       }
     }
 
-    // If key already exists, remove from access order (will be re-added at end)
     if (this.entries.has(key)) {
-      this.removeFromAccessOrder(key);
+      this.entries.delete(key);
     } else if (this.entries.size >= this.config.maxSize) {
-      // Evict oldest (LRU)
-      const oldest = this.accessOrder.shift();
-      if (oldest !== undefined) {
-        this.entries.delete(oldest);
-        this._evictions++;
-      }
+      this.evictOldest();
     }
 
     this.entries.set(key, { data, expiresAt: Date.now() + resolvedTtl });
-    this.accessOrder.push(key);
   }
 
   delete(key: string): void {
-    if (this.entries.delete(key)) {
-      this.removeFromAccessOrder(key);
-    }
+    this.entries.delete(key);
   }
 
   clear(): void {
     this.entries.clear();
-    this.accessOrder = [];
   }
 
   reset(): void {
@@ -106,10 +98,12 @@ export class ResultCache {
     };
   }
 
-  private removeFromAccessOrder(key: string): void {
-    const idx = this.accessOrder.indexOf(key);
-    if (idx !== -1) {
-      this.accessOrder.splice(idx, 1);
+  private evictOldest(): void {
+    const oldest = this.entries.keys().next().value;
+    if (oldest === undefined) {
+      return;
     }
+    this.entries.delete(oldest);
+    this._evictions++;
   }
 }

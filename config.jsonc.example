@@ -4,7 +4,6 @@
   // =========================================================================
   // Format: JSONC (JSON with // line comments).
   // All fields are optional unless marked required. Defaults are shown below.
-  // Env var overrides: double-underscore nesting, e.g. TAVILY__API_KEYS
   // =========================================================================
 
   // === Provider API Keys ===
@@ -76,7 +75,6 @@
   // === Authentication ===
 
   // Admin panel credentials & session settings.
-  // Alternatively, set ADMIN_PASSWORD and ADMIN_SESSION_SECRET env vars.
   "admin": {
     // SHA-256 hash of the admin password.
     // Generate: node -e "console.log(require('crypto').createHash('sha256').update('your-password').digest('hex'))"

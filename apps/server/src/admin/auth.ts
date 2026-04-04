@@ -21,12 +21,10 @@ function generateSessionToken(): string {
 
 function getSessionSecret(deps: AdminDeps): string {
   const { config } = deps.runtimeState.current;
-  const secret =
-    config.admin?.session_secret ||
-    process.env.ADMIN_SESSION_SECRET;
+  const secret = config.admin?.session_secret;
   if (!secret) {
     throw new Error(
-      "Admin session secret not configured. Set admin.session_secret in config or ADMIN_SESSION_SECRET env var.",
+      "Admin session secret not configured. Set admin.session_secret in config.jsonc.",
     );
   }
   return secret;
@@ -68,17 +66,6 @@ function verifySignedToken(signed: string, secret: string): string | null {
 function getPasswordHash(deps: AdminDeps): string | undefined {
   const { config } = deps.runtimeState.current;
   return config.admin?.password_hash;
-}
-
-function bootstrapPassword(deps: AdminDeps): string | undefined {
-  const { config } = deps.runtimeState.current;
-  const envPassword = process.env.ADMIN_PASSWORD;
-  if (!envPassword) return undefined;
-
-  // Already set
-  if (config.admin?.password_hash) return config.admin.password_hash;
-
-  return hashPassword(envPassword);
 }
 
 // ---------------------------------------------------------------------------
@@ -138,7 +125,7 @@ export function createAuthRoutes(deps: AdminDeps): Hono {
       return c.json({ error: "Password required" }, 400);
     }
 
-    const storedHash = getPasswordHash(deps) ?? bootstrapPassword(deps);
+    const storedHash = getPasswordHash(deps);
     if (!storedHash) {
       return c.json({ error: "Admin not configured" }, 403);
     }
