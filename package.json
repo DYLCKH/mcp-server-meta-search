@@ -5,7 +5,10 @@
   "scripts": {
     "build": "pnpm -r build",
     "test": "vitest run",
-    "dev": "pnpm --filter @meta-search/server dev",
+    "dev": "node ./scripts/dev.mjs",
+    "dev:server": "node ./scripts/dev-server.mjs",
+    "dev:web": "node ./scripts/dev-web.mjs",
+    "start": "pnpm --filter @meta-search/server start",
     "clean": "pnpm -r exec rm -rf dist"
   },
   "devDependencies": {

@@ -47,6 +47,9 @@ pnpm build
 pnpm dev
 ```
 
+`pnpm dev` now starts both the API server and the admin WebUI, and it will
+pick the next free port automatically if `3000` or `5173` is already in use.
+
 ### Docker
 
 ```bash

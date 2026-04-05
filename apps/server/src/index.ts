@@ -236,7 +236,7 @@ async function main(): Promise<void> {
   const honoListener = getRequestListener(app.fetch);
 
   // 12. Determine WebUI static root
-  const webRoot = join(WORKSPACE_ROOT, "apps", "web", "public");
+  const webRoot = join(WORKSPACE_ROOT, "apps", "web", "dist");
 
   // 13. Create a raw Node.js HTTP server that routes /mcp to the MCP
   //     transport, /app/* to static files, and everything else to Hono

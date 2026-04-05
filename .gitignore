@@ -5,6 +5,7 @@ dist/
 *.db-wal
 *.tsbuildinfo
 .turbo/
+.dev-runtime/
 .worktrees/
 .env
 .env.*
