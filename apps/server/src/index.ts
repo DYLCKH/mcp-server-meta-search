@@ -187,17 +187,17 @@ async function main(): Promise<void> {
   initDatabase(dbPath);
   const dbHandle = createDbHandle();
 
-  // 6. Initialize MCP server and transport
-  const mcpServer = createMcpServer(rt);
+  // 6. Create mutable refs for runtime snapshots
+  const runtimeStateRef: { current: RuntimeState } = { current: rt };
+  const patSnapshotRef: { current: PatSnapshot } = { current: patSnapshot };
+
+  // 7. Initialize MCP server and transport
+  const mcpServer = createMcpServer(runtimeStateRef);
   const transport = createTransport();
   await mcpServer.connect(transport);
 
-  // 7. Track readiness
+  // 8. Track readiness
   let ready = false;
-
-  // 8. Create mutable refs for admin
-  const runtimeStateRef: { current: RuntimeState } = { current: rt };
-  const patSnapshotRef: { current: PatSnapshot } = { current: patSnapshot };
 
   // 9. Create admin router
   const adminDeps: AdminDeps = {

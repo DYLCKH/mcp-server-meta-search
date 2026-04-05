@@ -193,7 +193,7 @@ export function ProvidersPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         badge="Provider pools"
         title="Provider 容量与 key 健康面板"
@@ -202,6 +202,7 @@ export function ProvidersPage() {
           <>
             <Button
               variant="outline"
+              size="sm"
               onClick={() => {
                 setProviderQuery("");
                 setProviderScope("all");
@@ -211,7 +212,7 @@ export function ProvidersPage() {
               <Filter className="h-4 w-4" />
               Reset filters
             </Button>
-            <Button onClick={() => setAddKeyOpen(true)} disabled={!selectedSummary}>
+            <Button size="sm" onClick={() => setAddKeyOpen(true)} disabled={!selectedSummary}>
               <Plus className="h-4 w-4" />
               Add key
             </Button>
@@ -244,18 +245,25 @@ export function ProvidersPage() {
         <StateAlert tone="error" title="Failed to load providers" message={error} />
       ) : null}
 
-      <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-        <Card className="xl:sticky xl:top-28 xl:h-fit">
-          <CardHeader className="space-y-2">
-            <Badge variant="outline" className="w-fit">
-              Provider rail
-            </Badge>
-            <CardTitle>Choose a working set</CardTitle>
-            <CardDescription>
-              左侧只负责检索和切换上下文，避免在一个页面里混入过多编辑操作。
-            </CardDescription>
+      <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
+        <Card className="xl:sticky xl:top-24 xl:h-fit">
+          <CardHeader className="gap-3 border-b bg-muted/20">
+            <div className="flex items-center justify-between gap-3">
+              <div className="space-y-1.5">
+                <Badge variant="secondary" className="w-fit">
+                  Provider rail
+                </Badge>
+                <CardTitle>Choose a working set</CardTitle>
+                <CardDescription>
+                  左侧只负责检索和切换上下文，不在列表里混入编辑动作。
+                </CardDescription>
+              </div>
+              <Badge variant="outline">
+                {loading ? "..." : `${visibleSummaries.length}/${summaries.length}`}
+              </Badge>
+            </div>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3 p-3">
             <Input
               value={providerQuery}
               onChange={(event) => setProviderQuery(event.target.value)}
@@ -282,7 +290,7 @@ export function ProvidersPage() {
             {loading ? (
               <LoadingState label="Loading providers" compact />
             ) : visibleSummaries.length ? (
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {visibleSummaries.map((provider) => {
                   const isSelected = provider.name === selected;
 
@@ -292,16 +300,16 @@ export function ProvidersPage() {
                       type="button"
                       onClick={() => setSelected(provider.name)}
                       className={cn(
-                        "w-full rounded-xl border px-4 py-3 text-left transition-colors",
+                        "w-full rounded-lg border px-3 py-3 text-left transition-colors",
                         isSelected
-                          ? "border-primary/30 bg-primary/5"
-                          : "border-border bg-background hover:bg-muted/40",
+                          ? "border-primary/20 bg-primary/5 shadow-sm"
+                          : "border-border bg-background hover:bg-muted/50",
                       )}
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-medium capitalize">{provider.name}</p>
-                          <p className="text-sm text-muted-foreground">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium capitalize">{provider.name}</p>
+                          <p className="text-xs text-muted-foreground">
                             {provider.total} keys · {provider.activeKeys} active
                           </p>
                         </div>
@@ -311,7 +319,7 @@ export function ProvidersPage() {
                           {provider.activeKeys > 0 ? "Serving" : "Blocked"}
                         </Badge>
                       </div>
-                      <div className="mt-3">
+                      <div className="mt-2.5">
                         <MixBar
                           active={provider.activeKeys}
                           disabled={provider.disabledKeys}
@@ -334,37 +342,44 @@ export function ProvidersPage() {
         </Card>
 
         <Card>
-          <CardHeader className="gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <CardHeader className="gap-4 border-b bg-muted/20 md:flex-row md:items-start md:justify-between">
             <div className="space-y-3">
-              <div className="space-y-2">
-                <Badge variant="outline" className="w-fit">
-                  {selectedSummary?.name || "Provider"}
-                </Badge>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary">{selectedSummary?.name || "Provider"}</Badge>
+                {selectedSummary ? (
+                  <>
+                    <Badge variant={selectedHasAttention ? "warning" : "success"}>
+                      {selectedHasAttention ? "Needs review" : "Stable"}
+                    </Badge>
+                    <Badge variant="outline">Total {selectedSummary.total}</Badge>
+                    <Badge variant="success">Active {selectedSummary.activeKeys}</Badge>
+                    <Badge variant="warning">Disabled {selectedSummary.disabledKeys}</Badge>
+                    <Badge variant="destructive">Revoked {selectedSummary.revokedKeys}</Badge>
+                  </>
+                ) : (
+                  <Badge variant="outline">No selection</Badge>
+                )}
+              </div>
+              <div className="space-y-1.5">
                 <CardTitle className="capitalize">
                   {selectedSummary?.name || "Select a provider"} workspace
                 </CardTitle>
                 <CardDescription>
-                  右侧只保留容量判断、operator notes 和逐条 key 操作。
+                  右侧工作区保留容量判断、操作说明和逐条 key 处理。
                 </CardDescription>
               </div>
-              {selectedSummary ? (
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant={selectedHasAttention ? "warning" : "success"}>
-                    {selectedHasAttention ? "Needs review" : "Stable"}
-                  </Badge>
-                  <Badge variant="outline">Total {selectedSummary.total}</Badge>
-                  <Badge variant="success">Active {selectedSummary.activeKeys}</Badge>
-                  <Badge variant="warning">Disabled {selectedSummary.disabledKeys}</Badge>
-                  <Badge variant="destructive">Revoked {selectedSummary.revokedKeys}</Badge>
-                </div>
-              ) : null}
             </div>
-            <Button onClick={() => setAddKeyOpen(true)} disabled={!selectedSummary}>
-              <Plus className="h-4 w-4" />
-              Add key
-            </Button>
+            <div className="flex items-center gap-2">
+              {selectedSummary ? (
+                <Badge variant="outline">{detail?.keys?.length ?? selectedSummary.total} keys</Badge>
+              ) : null}
+              <Button size="sm" onClick={() => setAddKeyOpen(true)} disabled={!selectedSummary}>
+                <Plus className="h-4 w-4" />
+                Add key
+              </Button>
+            </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4 p-4">
             {!selectedSummary ? (
               <EmptyState
                 title="No provider selected"
@@ -379,110 +394,133 @@ export function ProvidersPage() {
                 message={detailError}
               />
             ) : (
-              <div className="space-y-6">
-                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-                  <Card className="shadow-none">
-                    <CardContent className="space-y-4 p-5">
-                      <div>
-                        <p className="font-medium">
+              <div className="space-y-4">
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
+                  <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="space-y-1.5">
+                        <p className="text-sm font-medium">
                           {selectedHasAttention
                             ? "This pool is degraded and should be reviewed before traffic shifts toward it."
                             : "This pool is healthy and can keep receiving traffic."}
                         </p>
-                        <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                          优先替换 revoked key，再决定 disabled key 是否恢复。
+                        <p className="text-sm leading-6 text-muted-foreground">
+                          优先替换 revoked key，再决定 disabled key 是否需要恢复。
                         </p>
                       </div>
-                      <MixBar
-                        active={selectedSummary.activeKeys}
-                        disabled={selectedSummary.disabledKeys}
-                        revoked={selectedSummary.revokedKeys}
-                        total={selectedSummary.total}
+                      <Badge variant={selectedHasAttention ? "warning" : "success"}>
+                        {selectedHasAttention ? "Degraded" : "Healthy"}
+                      </Badge>
+                    </div>
+                    <MixBar
+                      active={selectedSummary.activeKeys}
+                      disabled={selectedSummary.disabledKeys}
+                      revoked={selectedSummary.revokedKeys}
+                      total={selectedSummary.total}
+                    />
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <LegendStat
+                        label="Active"
+                        value={selectedSummary.activeKeys}
+                        tone="success"
                       />
-                      <div className="grid gap-2 sm:grid-cols-3">
-                        <LegendStat
-                          label="Active"
-                          value={selectedSummary.activeKeys}
-                          tone="success"
-                        />
-                        <LegendStat
-                          label="Disabled"
-                          value={selectedSummary.disabledKeys}
-                          tone="warning"
-                        />
-                        <LegendStat
-                          label="Revoked"
-                          value={selectedSummary.revokedKeys}
-                          tone="destructive"
-                        />
-                      </div>
-                    </CardContent>
-                  </Card>
+                      <LegendStat
+                        label="Disabled"
+                        value={selectedSummary.disabledKeys}
+                        tone="warning"
+                      />
+                      <LegendStat
+                        label="Revoked"
+                        value={selectedSummary.revokedKeys}
+                        tone="destructive"
+                      />
+                    </div>
+                  </div>
 
-                  <Card className="shadow-none">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base">Operator notes</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3 text-sm leading-6 text-muted-foreground">
-                      <p>Disable suspicious keys first, then delete them after replacement is verified.</p>
-                      <p>Revoked keys cannot be re-enabled and should be replaced instead of recovered.</p>
-                      <p>Use last-used timestamps to avoid rotating out the only credential still serving traffic.</p>
-                    </CardContent>
-                  </Card>
+                  <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">Operator notes</p>
+                      <p className="text-sm leading-6 text-muted-foreground">
+                        先控制风险，再做清理或恢复，避免把唯一仍在承载流量的凭据误下线。
+                      </p>
+                    </div>
+                    <div className="space-y-2 text-sm text-muted-foreground">
+                      <div className="rounded-md border bg-background px-3 py-2">
+                        Disable suspicious keys first, then delete them after replacement is verified.
+                      </div>
+                      <div className="rounded-md border bg-background px-3 py-2">
+                        Revoked keys cannot be re-enabled and should be replaced instead of recovered.
+                      </div>
+                      <div className="rounded-md border bg-background px-3 py-2">
+                        Use last-used timestamps to avoid rotating out the only credential still serving traffic.
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 {detail?.keys?.length ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Credential</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Last used</TableHead>
-                        <TableHead>Notes</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {detail.keys.map((key, index) => (
-                        <TableRow key={`${selectedSummary.name}-${index}`}>
-                          <TableCell className="font-mono text-sm text-primary">
-                            {key.masked}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={statusVariant(key.status)}>
-                              {key.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {key.lastUsed ? formatDate(key.lastUsed) : "No usage recorded yet"}
-                          </TableCell>
-                          <TableCell className="max-w-[24rem] text-muted-foreground">
-                            {providerKeyDescription(key)}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={key.status === "revoked"}
-                                onClick={() => handleToggleKey(key, index)}
-                              >
-                                {key.enabled ? "Disable" : "Enable"}
-                              </Button>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => handleDeleteKey(index)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                                Delete
-                              </Button>
-                            </div>
-                          </TableCell>
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium">Credential inventory</p>
+                        <p className="text-sm text-muted-foreground">
+                          逐条处理启停和删除动作，减少在长列表中来回扫描。
+                        </p>
+                      </div>
+                      <Badge variant="outline">{detail.keys.length} rows</Badge>
+                    </div>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Credential</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Last used</TableHead>
+                          <TableHead>Notes</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {detail.keys.map((key, index) => (
+                          <TableRow key={`${selectedSummary.name}-${index}`}>
+                            <TableCell className="font-mono text-sm text-primary">
+                              {key.masked}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={statusVariant(key.status)}>
+                                {key.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {key.lastUsed ? formatDate(key.lastUsed) : "No usage recorded yet"}
+                            </TableCell>
+                            <TableCell className="max-w-[24rem] whitespace-normal text-muted-foreground">
+                              {providerKeyDescription(key)}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={key.status === "revoked"}
+                                  onClick={() => handleToggleKey(key, index)}
+                                >
+                                  {key.enabled ? "Disable" : "Enable"}
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => handleDeleteKey(index)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  Delete
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 ) : (
                   <EmptyState
                     title="No keys configured"

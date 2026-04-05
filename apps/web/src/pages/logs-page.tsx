@@ -138,7 +138,7 @@ export function LogsPage() {
   const currentAuditData = auditData?.logs ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         badge="Observability"
         title="请求与审计日志工作台"
@@ -164,9 +164,9 @@ export function LogsPage() {
       />
 
       <Card>
-        <CardHeader className="gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-2">
-            <Badge variant="outline" className="w-fit">
+        <CardHeader className="gap-4 border-b bg-muted/20 md:flex-row md:items-start md:justify-between">
+          <div className="space-y-1.5">
+            <Badge variant="secondary" className="w-fit">
               Filters
             </Badge>
             <CardTitle>Slice the event stream</CardTitle>
@@ -176,7 +176,7 @@ export function LogsPage() {
           </div>
           <Badge variant="outline">Server-backed pagination</Badge>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4 p-4">
           <Tabs
             value={activeTab}
             onValueChange={(value) => setActiveTab(value as "requests" | "audit")}
@@ -188,7 +188,7 @@ export function LogsPage() {
 
             <TabsContent value="requests">
               <form
-                className="grid gap-4 lg:grid-cols-[repeat(5,minmax(0,1fr))_auto]"
+                className="grid gap-3 lg:grid-cols-[repeat(5,minmax(0,1fr))_auto]"
                 onSubmit={(event) => {
                   event.preventDefault();
                   setRequestFilters(requestDraft);
@@ -267,13 +267,14 @@ export function LogsPage() {
                   }
                 />
                 <div className="flex items-end gap-2">
-                  <Button type="submit">
+                  <Button type="submit" size="sm">
                     <Search className="h-4 w-4" />
                     Apply
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
+                    size="sm"
                     onClick={() => {
                       setRequestDraft(EMPTY_REQUEST_FILTERS);
                       setRequestFilters(EMPTY_REQUEST_FILTERS);
@@ -288,7 +289,7 @@ export function LogsPage() {
 
             <TabsContent value="audit">
               <form
-                className="grid gap-4 lg:grid-cols-[repeat(4,minmax(0,1fr))_auto]"
+                className="grid gap-3 lg:grid-cols-[repeat(4,minmax(0,1fr))_auto]"
                 onSubmit={(event) => {
                   event.preventDefault();
                   setAuditFilters(auditDraft);
@@ -344,13 +345,14 @@ export function LogsPage() {
                   }
                 />
                 <div className="flex items-end gap-2">
-                  <Button type="submit">
+                  <Button type="submit" size="sm">
                     <Search className="h-4 w-4" />
                     Apply
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
+                    size="sm"
                     onClick={() => {
                       setAuditDraft(EMPTY_AUDIT_FILTERS);
                       setAuditFilters(EMPTY_AUDIT_FILTERS);
@@ -372,9 +374,9 @@ export function LogsPage() {
 
       {activeTab === "requests" ? (
         <Card>
-          <CardHeader className="gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-2">
-              <Badge variant="outline" className="w-fit">
+          <CardHeader className="gap-4 border-b bg-muted/20 md:flex-row md:items-start md:justify-between">
+            <div className="space-y-1.5">
+              <Badge variant="secondary" className="w-fit">
                 Requests
               </Badge>
               <CardTitle>Latest provider traffic</CardTitle>
@@ -386,7 +388,7 @@ export function LogsPage() {
               {requestData?.hasMore ? "More available" : "Newest page"}
             </Badge>
           </CardHeader>
-          <CardContent className="space-y-5">
+          <CardContent className="space-y-3 p-4">
             {loading ? (
               <LoadingState label="Loading request logs" compact />
             ) : currentRequestData.length ? (
@@ -443,9 +445,9 @@ export function LogsPage() {
         </Card>
       ) : (
         <Card>
-          <CardHeader className="gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-2">
-              <Badge variant="outline" className="w-fit">
+          <CardHeader className="gap-4 border-b bg-muted/20 md:flex-row md:items-start md:justify-between">
+            <div className="space-y-1.5">
+              <Badge variant="secondary" className="w-fit">
                 Audit
               </Badge>
               <CardTitle>Latest admin actions</CardTitle>
@@ -457,7 +459,7 @@ export function LogsPage() {
               {auditData?.hasMore ? "More available" : "Newest page"}
             </Badge>
           </CardHeader>
-          <CardContent className="space-y-5">
+          <CardContent className="space-y-3 p-4">
             {loading ? (
               <LoadingState label="Loading audit logs" compact />
             ) : currentAuditData.length ? (
@@ -517,8 +519,8 @@ function FilterField({
   input: ReactNode;
 }) {
   return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
+    <div className="space-y-1.5">
+      <Label className="text-xs font-medium text-muted-foreground">{label}</Label>
       {input}
     </div>
   );

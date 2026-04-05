@@ -104,11 +104,13 @@ export interface PerfInstances {
   cache: ResultCache;
   limiter: ConcurrencyLimiter;
   singleFlight: SingleFlight;
-  circuitBreaker: CircuitBreaker;
   metrics: MetricsCollector;
+  getCircuitBreaker(providerName: string): CircuitBreaker;
 }
 
 export function createPerfInstances(perfConfig: ResolvedPerformanceConfig): PerfInstances {
+  const circuitBreakers = new Map<string, CircuitBreaker>();
+
   return {
     cache: new ResultCache({
       maxSize: perfConfig.cache.maxSize,
@@ -120,12 +122,19 @@ export function createPerfInstances(perfConfig: ResolvedPerformanceConfig): Perf
       queueTimeoutMs: perfConfig.concurrency.queueTimeoutMs,
     }),
     singleFlight: new SingleFlight(),
-    circuitBreaker: new CircuitBreaker("global", {
-      failureThreshold: perfConfig.circuitBreaker.failureThreshold,
-      resetTimeoutMs: perfConfig.circuitBreaker.resetTimeoutMs,
-      halfOpenMaxRequests: 1,
-    }),
     metrics: new MetricsCollector(),
+    getCircuitBreaker(providerName: string): CircuitBreaker {
+      let breaker = circuitBreakers.get(providerName);
+      if (!breaker) {
+        breaker = new CircuitBreaker(providerName, {
+          failureThreshold: perfConfig.circuitBreaker.failureThreshold,
+          resetTimeoutMs: perfConfig.circuitBreaker.resetTimeoutMs,
+          halfOpenMaxRequests: 1,
+        });
+        circuitBreakers.set(providerName, breaker);
+      }
+      return breaker;
+    },
   };
 }
 

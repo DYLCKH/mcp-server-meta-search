@@ -214,9 +214,24 @@ export async function callWithPerf(opts: CallWithPerfOpts): Promise<RequestResul
 
   const start = performance.now();
 
-  // 1. Circuit breaker check
+  // 1. Cache check
+  if (perf.cache && cacheKey) {
+    const cached = perf.cache.get(cacheKey);
+    if (cached.hit) {
+      perf.metrics?.recordCacheHit(true);
+      perf.metrics?.recordRequest(
+        providerName,
+        tool,
+        performance.now() - start,
+        "success",
+      );
+      return cached.data as RequestResult;
+    }
+    perf.metrics?.recordCacheHit(false);
+  }
+
+  // 2. Circuit breaker check
   if (perf.circuitBreaker) {
-    // circuitBreaker.execute wraps the entire flow
     return perf.circuitBreaker.execute(() =>
       callWithPerfInner(opts, providerName, tool, start),
     );
@@ -233,17 +248,6 @@ async function callWithPerfInner(
 ): Promise<RequestResult> {
   const { perf, cacheKey, ...rotationOpts } = opts;
   if (!perf) return callWithKeyRotation(rotationOpts);
-
-  // 2. Cache check
-  if (perf.cache && cacheKey) {
-    const cached = perf.cache.get(cacheKey);
-    if (cached.hit) {
-      perf.metrics?.recordCacheHit(true);
-      perf.metrics?.recordRequest(providerName, tool, performance.now() - start, "success");
-      return cached.data as RequestResult;
-    }
-    perf.metrics?.recordCacheHit(false);
-  }
 
   // 3. Single-flight dedup
   const sfKey = cacheKey ?? `${providerName}:${Date.now()}:${Math.random()}`;

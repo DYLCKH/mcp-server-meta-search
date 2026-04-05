@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { extractErrorMessage } from "@/lib/admin";
 import { StateAlert } from "@/components/admin/primitives";
+import { ThemeToggle } from "@/components/admin/theme-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,55 +40,59 @@ export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4 py-8">
-      <div className="grid w-full max-w-6xl gap-6 lg:grid-cols-[1.1fr_420px]">
-        <Card className="border-border/80 bg-card/90 shadow-none">
-          <CardHeader className="space-y-6">
-            <div className="space-y-3">
-              <Badge variant="outline" className="w-fit">
+      <div className="grid w-full max-w-5xl gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
+        <Card className="border-border/80 bg-card/95">
+          <CardHeader className="gap-4 border-b bg-muted/20">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <Badge variant="secondary" className="w-fit">
                 Meta Search
               </Badge>
-              <div className="space-y-2">
-                <CardTitle className="max-w-2xl text-4xl tracking-tight sm:text-5xl">
-                  更纯粹的运维界面，只保留高频操作。
-                </CardTitle>
-                <CardDescription className="max-w-2xl text-base leading-7">
-                  Provider、PAT、运行时策略和日志排查全部收敛到标准化的
-                  shadcn/ui 组件里，减少视觉噪声和操作跳转。
-                </CardDescription>
-              </div>
+              <ThemeToggle />
+            </div>
+            <div className="space-y-2">
+              <CardTitle className="max-w-2xl text-3xl tracking-tight sm:text-4xl">
+                更紧凑的管理入口，只保留高频操作。
+              </CardTitle>
+              <CardDescription className="max-w-2xl text-sm leading-6">
+                Provider、PAT、运行时策略和日志排查统一收敛到
+                `shadcn/ui` 风格的单层控制台里，减少扫描成本和操作跳转。
+              </CardDescription>
             </div>
           </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-3">
+          <CardContent className="grid gap-3 p-4 md:grid-cols-3">
             <FeatureCard
               icon={<ShieldCheck className="h-4 w-4" />}
               title="Provider posture"
-              description="快速定位 active、disabled、revoked key。"
+              description="集中判断 active、disabled、revoked key 的容量分布。"
             />
             <FeatureCard
               icon={<KeyRound className="h-4 w-4" />}
               title="Token surface"
-              description="统一管理 PAT 暴露面和过期风险。"
+              description="统一管理 PAT 暴露面、启停和轮换风险。"
             />
             <FeatureCard
               icon={<Logs className="h-4 w-4" />}
               title="Event tracing"
-              description="请求日志和审计日志在同一工作台内完成筛查。"
+              description="请求日志和审计日志在同一工作台内筛查。"
             />
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="space-y-3">
+        <Card className="border-border/80 bg-card/95">
+          <CardHeader className="gap-3 border-b">
             <Badge className="w-fit">Admin access</Badge>
             <div className="space-y-2">
-              <CardTitle className="text-2xl">Sign in</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-xl">Sign in</CardTitle>
+              <CardDescription className="leading-6">
                 使用当前环境配置的管理员密码进入控制台。
               </CardDescription>
             </div>
           </CardHeader>
-          <CardContent>
-            <form className="space-y-5" onSubmit={handleSubmit}>
+          <CardContent className="space-y-4 p-4">
+            <div className="rounded-lg border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+              登录后可直接进入 provider、PAT、策略和日志工作区。
+            </div>
+            <form className="space-y-4" onSubmit={handleSubmit}>
               {error ? (
                 <StateAlert
                   tone="error"
@@ -128,9 +133,9 @@ function FeatureCard({
   description: string;
 }) {
   return (
-    <Card className="bg-muted/30 shadow-none">
-      <CardContent className="space-y-3 p-5">
-        <div className="inline-flex rounded-lg border bg-background p-2 text-primary">
+    <Card className="bg-background shadow-none">
+      <CardContent className="space-y-3 p-4">
+        <div className="inline-flex rounded-md border bg-muted/40 p-2 text-primary">
           {icon}
         </div>
         <div>

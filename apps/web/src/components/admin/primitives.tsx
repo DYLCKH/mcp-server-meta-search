@@ -30,20 +30,28 @@ export function PageHeader({
   stats?: ReactNode;
 }) {
   return (
-    <Card className="border-border/80 bg-card/90">
-      <CardHeader className="gap-6 lg:flex-row lg:items-start lg:justify-between">
-        <div className="space-y-3">
-          <Badge>{badge}</Badge>
-          <div className="space-y-2">
-            <CardTitle className="text-3xl tracking-tight sm:text-4xl">{title}</CardTitle>
-            <CardDescription className="max-w-3xl text-sm leading-6">
-              {description}
-            </CardDescription>
+    <Card className="border-border/80 bg-card/95">
+      <CardContent className="flex flex-col gap-4 p-4 md:p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-3">
+            <Badge variant="secondary" className="w-fit">
+              {badge}
+            </Badge>
+            <div className="space-y-1.5">
+              <CardTitle className="text-2xl tracking-tight sm:text-3xl">
+                {title}
+              </CardTitle>
+              <CardDescription className="max-w-3xl text-sm leading-6">
+                {description}
+              </CardDescription>
+            </div>
           </div>
-          {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
+          {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
         </div>
-        {stats ? <div className="w-full max-w-xl">{stats}</div> : null}
-      </CardHeader>
+        {stats ? (
+          <div className="rounded-lg border bg-muted/20 p-3 md:p-4">{stats}</div>
+        ) : null}
+      </CardContent>
     </Card>
   );
 }
@@ -61,18 +69,19 @@ export function SummaryStats({
         "grid gap-3",
         columns === 2 && "grid-cols-2",
         columns === 3 && "grid-cols-1 sm:grid-cols-3",
-        columns === 4 && "grid-cols-2 lg:grid-cols-4",
+        columns === 4 && "grid-cols-2 xl:grid-cols-4",
       )}
     >
       {items.map((item) => (
-        <Card key={item.label} className="bg-muted/30 shadow-none">
-          <CardContent className="space-y-2 p-4">
-            <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-              {item.label}
-            </p>
-            <p className="text-2xl font-semibold tracking-tight">{item.value}</p>
-          </CardContent>
-        </Card>
+        <div
+          key={item.label}
+          className="rounded-md border bg-background px-3 py-2.5 shadow-sm"
+        >
+          <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+            {item.label}
+          </p>
+          <p className="mt-1 text-lg font-semibold tracking-tight">{item.value}</p>
+        </div>
       ))}
     </div>
   );
@@ -84,14 +93,14 @@ export function MetricGrid({
   items: Array<{ label: string; value: string; meta: string; badge?: string }>;
 }) {
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className="data-grid">
       {items.map((item) => (
-        <Card key={item.label}>
-          <CardContent className="space-y-4 p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div>
+        <Card key={item.label} className="overflow-hidden">
+          <CardContent className="space-y-3 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
                 <p className="text-sm font-medium text-muted-foreground">{item.label}</p>
-                <p className="mt-2 text-3xl font-semibold tracking-tight">{item.value}</p>
+                <p className="text-2xl font-semibold tracking-tight">{item.value}</p>
               </div>
               {item.badge ? <Badge variant="outline">{item.badge}</Badge> : null}
             </div>
@@ -116,7 +125,7 @@ export function StateAlert({
     tone === "error" ? "destructive" : tone === "success" ? "success" : "warning";
 
   return (
-    <Alert variant={variant} className="flex gap-3">
+    <Alert variant={variant} className="flex items-start gap-3">
       <div className="mt-0.5">
         {tone === "success" ? (
           <CheckCircle2 className="h-4 w-4" />
@@ -126,7 +135,7 @@ export function StateAlert({
           <ShieldAlert className="h-4 w-4" />
         )}
       </div>
-      <div>
+      <div className="min-w-0">
         <AlertTitle>{title}</AlertTitle>
         <AlertDescription>{message}</AlertDescription>
       </div>
@@ -143,8 +152,8 @@ export function EmptyState({
 }) {
   return (
     <Card className="border-dashed shadow-none">
-      <CardContent className="py-10 text-center">
-        <p className="text-base font-medium">{title}</p>
+      <CardContent className="py-8 text-center">
+        <p className="text-sm font-medium">{title}</p>
         <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
           {description}
         </p>
@@ -162,15 +171,15 @@ export function LoadingState({
 }) {
   return (
     <Card className="shadow-none">
-      <CardContent className={cn("space-y-4 p-5", compact ? "py-5" : "py-8")}>
-        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+      <CardContent className={cn("space-y-3 p-4", compact ? "py-4" : "py-6")}>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <LoaderCircle className="h-4 w-4 animate-spin text-primary" />
           <span>{label}</span>
         </div>
-        <div className="space-y-3">
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-3/4" />
+        <div className="space-y-2.5">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-3/4" />
         </div>
       </CardContent>
     </Card>
@@ -200,7 +209,7 @@ export function MixBar({
       <div
         className={cn(
           "flex overflow-hidden rounded-full bg-muted",
-          compact ? "h-2" : "h-2.5",
+          compact ? "h-1.5" : "h-2",
         )}
       >
         <div className="bg-emerald-500" style={{ width: activeWidth }} />
@@ -226,8 +235,8 @@ export function LegendStat({
   tone: "success" | "warning" | "destructive";
 }) {
   return (
-    <div className="flex items-center justify-between rounded-lg border bg-background px-3 py-2.5">
-      <div className="flex items-center gap-2.5">
+    <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
+      <div className="flex items-center gap-2">
         <div
           className={cn(
             "h-2 w-2 rounded-full",
@@ -255,7 +264,7 @@ export function Field({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
-        <Label>{label}</Label>
+        <Label className="text-sm font-medium">{label}</Label>
         {hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
       </div>
       {input}
@@ -280,7 +289,7 @@ export function PaginationBar({
   const to = page * PAGE_SIZE + count;
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border bg-muted/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
       <div className="text-sm text-muted-foreground">
         Page {page + 1} · Showing {from}-{to}
       </div>

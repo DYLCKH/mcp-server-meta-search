@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 
@@ -111,18 +111,23 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         badge="Runtime policy"
         title="运行时策略编辑台"
         description="直接修改超时、重试与 key 生命周期参数，保存后立即生效。"
         actions={
           <>
-            <Button variant="outline" onClick={handleReset} disabled={!hasChanges || saving}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleReset}
+              disabled={!hasChanges || saving}
+            >
               <RefreshCcw className="h-4 w-4" />
               Revert
             </Button>
-            <Button onClick={handleSave} disabled={!hasChanges || saving || !form}>
+            <Button size="sm" onClick={handleSave} disabled={!hasChanges || saving || !form}>
               {saving ? "Saving..." : "Save changes"}
             </Button>
           </>
@@ -160,28 +165,30 @@ export function SettingsPage() {
         <StateAlert tone="success" title="Policy updated" message={savedMessage} />
       ) : null}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-6">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="space-y-4">
           <Card>
-            <CardHeader className="space-y-2">
-              <Badge variant="outline" className="w-fit">
+            <CardHeader className="gap-3 border-b bg-muted/20">
+              <Badge variant="secondary" className="w-fit">
                 Traffic orchestration
               </Badge>
-              <CardTitle>How requests move through the fleet</CardTitle>
-              <CardDescription>
-                这些设置决定 key 选择策略、请求耐心和重试压力。
-              </CardDescription>
+              <div className="space-y-1">
+                <CardTitle>How requests move through the fleet</CardTitle>
+                <CardDescription>
+                  这些设置决定 key 选择策略、请求耐心和重试压力。
+                </CardDescription>
+              </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4">
               {loading || !form ? (
                 <LoadingState label="Loading settings" compact />
               ) : (
-                <div className="grid gap-4 xl:grid-cols-2">
-                  <Card className="shadow-none">
-                    <CardContent className="space-y-3 p-5">
-                      <Label htmlFor="key_rotation_strategy">
-                        {FIELD_META.key_rotation_strategy.label}
-                      </Label>
+                <div className="grid gap-3 xl:grid-cols-3">
+                  <SettingsFieldShell
+                    id="key_rotation_strategy"
+                    label={FIELD_META.key_rotation_strategy.label}
+                    description={FIELD_META.key_rotation_strategy.description}
+                    input={
                       <Select
                         value={form.key_rotation_strategy}
                         onValueChange={(value: SettingsData["key_rotation_strategy"]) =>
@@ -196,12 +203,8 @@ export function SettingsPage() {
                           <SelectItem value="random">Random</SelectItem>
                         </SelectContent>
                       </Select>
-                      <p className="text-sm leading-6 text-muted-foreground">
-                        {FIELD_META.key_rotation_strategy.description}
-                      </p>
-                    </CardContent>
-                  </Card>
-
+                    }
+                  />
                   <SettingsNumberField
                     id="max_attempts_per_request"
                     label={FIELD_META.max_attempts_per_request.label}
@@ -224,20 +227,22 @@ export function SettingsPage() {
           </Card>
 
           <Card>
-            <CardHeader className="space-y-2">
-              <Badge variant="outline" className="w-fit">
+            <CardHeader className="gap-3 border-b bg-muted/20">
+              <Badge variant="secondary" className="w-fit">
                 Key lifecycle
               </Badge>
-              <CardTitle>How damaged credentials recover or fail out</CardTitle>
-              <CardDescription>
-                这里控制 key 被隔离多久，以及何时被视为不可恢复。
-              </CardDescription>
+              <div className="space-y-1">
+                <CardTitle>How damaged credentials recover or fail out</CardTitle>
+                <CardDescription>
+                  这里控制 key 被隔离多久，以及何时被视为不可恢复。
+                </CardDescription>
+              </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4">
               {loading || !form ? (
                 <LoadingState label="Loading settings" compact />
               ) : (
-                <div className="grid gap-4 xl:grid-cols-2">
+                <div className="grid gap-3 xl:grid-cols-2">
                   <SettingsNumberField
                     id="key_recovery_interval_ms"
                     label={FIELD_META.key_recovery_interval_ms.label}
@@ -262,68 +267,57 @@ export function SettingsPage() {
           </Card>
         </div>
 
-        <div className="space-y-6 xl:sticky xl:top-28 xl:h-fit">
+        <div className="space-y-4 xl:sticky xl:top-24 xl:h-fit">
           <Card>
-            <CardHeader className="space-y-2">
-              <Badge variant="outline" className="w-fit">
+            <CardHeader className="gap-3 border-b bg-muted/20">
+              <Badge variant="secondary" className="w-fit">
                 Change summary
               </Badge>
               <CardTitle>{changedFields.length ? "Pending edits" : "No unsaved changes"}</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4">
               {changedFields.length ? (
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {changedFields.map((field) => (
-                    <Card key={field} className="border-primary/20 bg-primary/5 shadow-none">
-                      <CardContent className="space-y-1 p-4">
-                        <p className="font-medium">{FIELD_META[field].label}</p>
-                        <p className="text-sm leading-6 text-muted-foreground">
-                          {FIELD_META[field].description}
-                        </p>
-                      </CardContent>
-                    </Card>
+                    <div
+                      key={field}
+                      className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-3"
+                    >
+                      <p className="font-medium">{FIELD_META[field].label}</p>
+                      <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                        {FIELD_META[field].description}
+                      </p>
+                    </div>
                   ))}
                 </div>
               ) : (
-                <Card className="border-emerald-200 bg-emerald-50 shadow-none">
-                  <CardContent className="p-4">
-                    <p className="font-medium">Policy matches runtime</p>
-                    <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                      The form is aligned with the latest values loaded from the server.
-                    </p>
-                  </CardContent>
-                </Card>
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 dark:border-emerald-900 dark:bg-emerald-950/60">
+                  <p className="font-medium">Policy matches runtime</p>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    The form is aligned with the latest values loaded from the server.
+                  </p>
+                </div>
               )}
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="space-y-2">
-              <Badge variant="outline" className="w-fit">
+            <CardHeader className="gap-3 border-b bg-muted/20">
+              <Badge variant="secondary" className="w-fit">
                 Operator notes
               </Badge>
               <CardTitle>Safer change patterns</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3 text-sm leading-6 text-muted-foreground">
-              <Card className="bg-muted/30 shadow-none">
-                <CardContent className="p-4">
-                  Increase timeout and retries together only when upstream latency is
-                  the problem. Raising one without the other usually just shifts failure
-                  modes.
-                </CardContent>
-              </Card>
-              <Card className="bg-muted/30 shadow-none">
-                <CardContent className="p-4">
-                  Short recovery intervals can oscillate degraded keys back into
-                  rotation too early. Use them only when instability is transient.
-                </CardContent>
-              </Card>
-              <Card className="bg-muted/30 shadow-none">
-                <CardContent className="p-4">
-                  Lower revoke thresholds make the system more conservative, but they
-                  also require faster key replacement discipline.
-                </CardContent>
-              </Card>
+            <CardContent className="space-y-2 p-4 text-sm leading-6 text-muted-foreground">
+              <div className="rounded-md border bg-muted/30 px-3 py-2">
+                Increase timeout and retries together only when upstream latency is the problem. Raising one without the other usually just shifts failure modes.
+              </div>
+              <div className="rounded-md border bg-muted/30 px-3 py-2">
+                Short recovery intervals can oscillate degraded keys back into rotation too early. Use them only when instability is transient.
+              </div>
+              <div className="rounded-md border bg-muted/30 px-3 py-2">
+                Lower revoke thresholds make the system more conservative, but they also require faster key replacement discipline.
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -346,17 +340,38 @@ function SettingsNumberField({
   onChange: (value: number) => void;
 }) {
   return (
-    <Card className="shadow-none">
-      <CardContent className="space-y-3 p-5">
-        <Label htmlFor={id}>{label}</Label>
+    <SettingsFieldShell
+      id={id}
+      label={label}
+      description={description}
+      input={
         <Input
           id={id}
           type="number"
           value={value}
           onChange={(event) => onChange(Number(event.target.value || 0))}
         />
-        <p className="text-sm leading-6 text-muted-foreground">{description}</p>
-      </CardContent>
-    </Card>
+      }
+    />
+  );
+}
+
+function SettingsFieldShell({
+  id,
+  label,
+  description,
+  input,
+}: {
+  id: string;
+  label: string;
+  description: string;
+  input: ReactNode;
+}) {
+  return (
+    <div className="space-y-3 rounded-lg border bg-background p-4 shadow-sm">
+      <Label htmlFor={id}>{label}</Label>
+      {input}
+      <p className="text-sm leading-6 text-muted-foreground">{description}</p>
+    </div>
   );
 }

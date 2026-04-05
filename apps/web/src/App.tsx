@@ -10,6 +10,7 @@ import {
 import { Toaster } from "sonner";
 
 import { AppShell } from "@/components/admin/shell";
+import { useTheme } from "@/components/admin/theme-provider";
 import { NAV_ITEMS, type AuthStatus } from "@/lib/admin";
 import {
   UNAUTHORIZED_EVENT,
@@ -27,6 +28,7 @@ import { SettingsPage } from "@/pages/settings-page";
 export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { resolvedTheme } = useTheme();
   const [authStatus, setAuthStatus] = useState<AuthStatus>("checking");
   const checkedRef = useRef(false);
 
@@ -125,7 +127,7 @@ export default function App() {
       <Toaster
         closeButton
         richColors
-        theme="light"
+        theme={resolvedTheme}
         toastOptions={{
           className: "font-sans",
         }}
@@ -137,9 +139,9 @@ export default function App() {
 function AppLoadingScreen() {
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
-      <Card className="w-full max-w-md">
-        <CardContent className="flex items-center gap-3 p-5">
-          <LoaderCircle className="h-5 w-5 animate-spin text-primary" />
+      <Card className="w-full max-w-sm border-border/80 bg-card/95">
+        <CardContent className="flex items-center gap-3 p-4">
+          <LoaderCircle className="h-4 w-4 animate-spin text-primary" />
           <div>
             <p className="font-medium">Loading admin console</p>
             <p className="text-sm text-muted-foreground">

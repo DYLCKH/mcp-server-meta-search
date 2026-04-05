@@ -144,7 +144,7 @@ export function DashboardPage() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         badge="Operations overview"
         title="搜索基础设施运行总览"
@@ -208,23 +208,57 @@ export function DashboardPage() {
         ]}
       />
 
-      <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+      <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
         <Card>
-          <CardHeader>
-            <Badge variant="outline" className="w-fit">
-              Action queue
-            </Badge>
-            <CardTitle>What needs attention now</CardTitle>
-            <CardDescription>
-              用明确动作替代装饰性大卡片，先处理容量和暴露面问题。
-            </CardDescription>
+          <CardHeader className="gap-4 border-b bg-muted/20">
+            <div className="flex items-center justify-between gap-3">
+              <div className="space-y-1.5">
+                <Badge variant="secondary" className="w-fit">
+                  Action queue
+                </Badge>
+                <CardTitle>What needs attention now</CardTitle>
+                <CardDescription>
+                  首屏只保留当前最值得处理的动作，避免信息分散在多个装饰区块里。
+                </CardDescription>
+              </div>
+              <Badge
+                variant={
+                  actionQueue.some((item) => item.tone !== "success")
+                    ? "warning"
+                    : "success"
+                }
+              >
+                {actionQueue.length} items
+              </Badge>
+            </div>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="p-0">
             {actionQueue.map((item) => (
-              <Card key={item.title} className="shadow-none">
-                <CardContent className="space-y-3 p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-2">
+              <div
+                key={item.title}
+                className="border-b px-4 py-4 last:border-b-0"
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className={
+                      item.tone === "success"
+                        ? "rounded-md border border-emerald-200 bg-emerald-50 p-2 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/70 dark:text-emerald-300"
+                        : item.tone === "warning"
+                          ? "rounded-md border border-amber-200 bg-amber-50 p-2 text-amber-700 dark:border-amber-900 dark:bg-amber-950/70 dark:text-amber-300"
+                          : "rounded-md border border-rose-200 bg-rose-50 p-2 text-rose-700 dark:border-rose-900 dark:bg-rose-950/70 dark:text-rose-300"
+                    }
+                  >
+                    {item.tone === "success" ? (
+                      <CheckCircle2 className="h-4 w-4" />
+                    ) : item.tone === "warning" ? (
+                      <AlertTriangle className="h-4 w-4" />
+                    ) : (
+                      <ShieldAlert className="h-4 w-4" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium">{item.title}</p>
                       <Badge
                         variant={
                           item.tone === "success"
@@ -240,35 +274,32 @@ export function DashboardPage() {
                             ? "Attention"
                             : "Risk"}
                       </Badge>
-                      <p className="font-medium">{item.title}</p>
-                      <p className="text-sm leading-6 text-muted-foreground">
-                        {item.description}
-                      </p>
                     </div>
-                    {item.tone === "success" ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                    ) : item.tone === "warning" ? (
-                      <AlertTriangle className="h-4 w-4 text-amber-600" />
-                    ) : (
-                      <ShieldAlert className="h-4 w-4 text-rose-600" />
-                    )}
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                      {item.description}
+                    </p>
+                    <Button
+                      asChild
+                      variant="ghost"
+                      size="sm"
+                      className="mt-2 h-auto px-0 text-primary hover:bg-transparent"
+                    >
+                      <Link to={item.link}>
+                        {item.label}
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    </Button>
                   </div>
-                  <Button asChild variant="ghost" className="px-0">
-                    <Link to={item.link}>
-                      {item.label}
-                      <ArrowRight className="h-4 w-4" />
-                    </Link>
-                  </Button>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             ))}
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-2">
-              <Badge variant="outline" className="w-fit">
+          <CardHeader className="gap-4 border-b bg-muted/20 md:flex-row md:items-start md:justify-between">
+            <div className="space-y-1.5">
+              <Badge variant="secondary" className="w-fit">
                 Provider matrix
               </Badge>
               <CardTitle>Where capacity is concentrated</CardTitle>
@@ -276,11 +307,14 @@ export function DashboardPage() {
                 按 provider 汇总可用容量，先看总量，再判断哪个池已经失去流量承接能力。
               </CardDescription>
             </div>
-            <Button asChild variant="outline">
-              <Link to="/providers">Open provider console</Link>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline">{providers.length} providers</Badge>
+              <Button asChild variant="outline" size="sm">
+                <Link to="/providers">Open provider console</Link>
+              </Button>
+            </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             {providers.length ? (
               <Table>
                 <TableHeader>
@@ -297,7 +331,7 @@ export function DashboardPage() {
                     .sort((left, right) => right.total - left.total)
                     .map((provider) => (
                       <TableRow key={provider.name}>
-                        <TableCell>
+                        <TableCell className="w-[32%]">
                           <Link to={`/providers?provider=${provider.name}`} className="block">
                             <div className="font-medium capitalize">{provider.name}</div>
                             <div className="text-sm text-muted-foreground">
@@ -325,7 +359,7 @@ export function DashboardPage() {
                             compact
                           />
                         </TableCell>
-                        <TableCell className="text-right text-sm text-muted-foreground">
+                        <TableCell className="text-right font-mono text-sm text-muted-foreground">
                           {provider.total}
                         </TableCell>
                       </TableRow>
@@ -333,10 +367,12 @@ export function DashboardPage() {
                 </TableBody>
               </Table>
             ) : (
-              <EmptyState
-                title="No providers available"
-                description="Add provider keys to start routing requests through the admin console."
-              />
+              <div className="p-4">
+                <EmptyState
+                  title="No providers available"
+                  description="Add provider keys to start routing requests through the admin console."
+                />
+              </div>
             )}
           </CardContent>
         </Card>

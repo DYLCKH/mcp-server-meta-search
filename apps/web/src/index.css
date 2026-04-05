@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    --background: 210 20% 98%;
+    --background: 0 0% 100%;
     --foreground: 222 47% 11%;
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
@@ -27,7 +27,33 @@
     --success-foreground: 138 62% 94%;
     --warning: 38 92% 50%;
     --warning-foreground: 31 92% 18%;
-    --radius: 0.875rem;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 222 47% 8%;
+    --foreground: 210 40% 96%;
+    --card: 222 39% 11%;
+    --card-foreground: 210 40% 96%;
+    --popover: 223 37% 12%;
+    --popover-foreground: 210 40% 96%;
+    --primary: 213 94% 68%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 96%;
+    --muted: 217 33% 15%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 27% 20%;
+    --accent-foreground: 210 40% 96%;
+    --destructive: 0 78% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 216 34% 17%;
+    --input: 216 34% 17%;
+    --ring: 213 94% 68%;
+    --success: 142 70% 38%;
+    --success-foreground: 144 80% 92%;
+    --warning: 38 92% 55%;
+    --warning-foreground: 35 100% 90%;
   }
 
   * {
@@ -41,36 +67,35 @@
   body {
     @apply min-h-screen bg-background font-sans text-foreground antialiased;
     background:
-      radial-gradient(circle at top left, rgba(59, 130, 246, 0.09), transparent 28%),
-      radial-gradient(circle at right top, rgba(16, 185, 129, 0.05), transparent 22%),
-      linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 1));
+      radial-gradient(circle at top, hsl(var(--primary) / 0.08), transparent 32%),
+      linear-gradient(
+        180deg,
+        hsl(var(--background)) 0%,
+        hsl(var(--muted) / 0.45) 100%
+      );
   }
 
-  body::before,
-  body::after {
-    content: "";
-    position: fixed;
-    inset: auto;
-    z-index: -1;
-    pointer-events: none;
-    border-radius: 999px;
-    filter: blur(90px);
+  .dark body {
+    background:
+      radial-gradient(circle at top, hsl(var(--primary) / 0.16), transparent 30%),
+      linear-gradient(
+        180deg,
+        hsl(var(--background)) 0%,
+        hsl(222 47% 6%) 100%
+      );
   }
 
   body::before {
-    top: -8rem;
-    right: -5rem;
-    height: 16rem;
-    width: 16rem;
-    background: rgba(59, 130, 246, 0.08);
-  }
-
-  body::after {
-    bottom: -10rem;
-    left: -6rem;
-    height: 18rem;
-    width: 18rem;
-    background: rgba(148, 163, 184, 0.08);
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      linear-gradient(hsl(var(--border) / 0.25) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border) / 0.25) 1px, transparent 1px);
+    background-size: 24px 24px;
+    mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.2), transparent 70%);
   }
 
   a {
@@ -85,20 +110,20 @@
   }
 
   ::selection {
-    background: rgba(59, 130, 246, 0.18);
+    background: hsl(var(--primary) / 0.18);
     color: inherit;
   }
 }
 
 @layer components {
   .data-grid {
-    @apply grid gap-4 md:grid-cols-2 xl:grid-cols-4;
+    @apply grid gap-3 md:grid-cols-2 xl:grid-cols-4;
   }
 
   .subtle-grid {
     background-image:
-      linear-gradient(rgba(148, 163, 184, 0.1) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(148, 163, 184, 0.1) 1px, transparent 1px);
-    background-size: 28px 28px;
+      linear-gradient(hsl(var(--border) / 0.28) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border) / 0.28) 1px, transparent 1px);
+    background-size: 24px 24px;
   }
 }

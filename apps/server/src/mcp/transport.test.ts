@@ -1,0 +1,125 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ResolvedConfig } from "@meta-search/config";
+import { KeyPool } from "@meta-search/runtime";
+import {
+  createTavilyToolHandler,
+  type RuntimeState,
+  type RuntimeStateRefLike,
+} from "./transport.js";
+
+function createConfig(baseUrl: string, apiKey: string): ResolvedConfig {
+  return {
+    tavily: {
+      base_url: baseUrl,
+      api_keys: [apiKey],
+    },
+    exa: undefined,
+    perplexity: undefined,
+    jina: undefined,
+    cloudflare: undefined,
+    pats: [],
+    admin: undefined,
+    key_rotation_strategy: "round_robin",
+    max_attempts_per_request: 1,
+    request_timeout_ms: 1_000,
+    key_recovery_interval_ms: 300_000,
+    max_disable_before_revoke: 3,
+    invalid_keys_file: "invalid-keys.json",
+    performance: {
+      cache: {
+        enabled: false,
+        maxSize: 16,
+        defaultTtlMs: 1_000,
+      },
+      concurrency: {
+        maxConcurrency: 2,
+        maxQueueSize: 4,
+        queueTimeoutMs: 1_000,
+      },
+      circuitBreaker: {
+        enabled: false,
+        failureThreshold: 5,
+        resetTimeoutMs: 30_000,
+      },
+      singleFlight: {
+        enabled: false,
+      },
+    },
+  };
+}
+
+function createRuntimeState(baseUrl: string, apiKey: string): RuntimeState {
+  return {
+    config: createConfig(baseUrl, apiKey),
+    perf: undefined,
+    tavilyKeyPool: new KeyPool({
+      providerName: "tavily",
+      keys: [apiKey],
+    }),
+    exaKeyPool: new KeyPool({
+      providerName: "exa",
+      keys: [],
+    }),
+    perplexityKeyPool: new KeyPool({
+      providerName: "perplexity",
+      keys: [],
+    }),
+    jinaKeyPool: new KeyPool({
+      providerName: "jina",
+      keys: [],
+    }),
+    cloudflareKeyPool: new KeyPool({
+      providerName: "cloudflare",
+      keys: [],
+    }),
+    onKeyRevoked: vi.fn(),
+  };
+}
+
+describe("createTavilyToolHandler", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("reads the latest runtime state on each invocation", async () => {
+    const runtimeStateRef: RuntimeStateRefLike = {
+      current: createRuntimeState("https://old.example", "old-key"),
+    };
+    const handler = createTavilyToolHandler(runtimeStateRef);
+
+    runtimeStateRef.current = createRuntimeState(
+      "https://new.example",
+      "new-key",
+    );
+
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(url).toBe("https://new.example/search");
+      expect(init?.headers).toMatchObject({
+        Authorization: "Bearer new-key",
+      });
+
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            query: "latest",
+            results: [],
+          }),
+      };
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await handler({
+      query: "latest",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.structuredContent).toMatchObject({
+      provider: "tavily",
+      query: "latest",
+    });
+  });
+});

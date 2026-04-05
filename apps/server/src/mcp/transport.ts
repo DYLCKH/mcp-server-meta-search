@@ -3,7 +3,6 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { z } from "zod";
 import {
   KeyPool,
-  callWithKeyRotation,
   callSingleRequest,
   callWithPerf,
 } from "@meta-search/runtime";
@@ -37,55 +36,124 @@ export interface RuntimeState {
   ) => void;
 }
 
+export interface RuntimeStateRefLike {
+  current: RuntimeState;
+}
+
 function normalizeResults(results: unknown): unknown[] {
   return Array.isArray(results) ? results : [];
 }
 
-function registerTools(server: McpServer, rt: RuntimeState): void {
-  const {
-    config,
-    perf,
-    tavilyKeyPool,
-    exaKeyPool,
-    perplexityKeyPool,
-    jinaKeyPool,
-    cloudflareKeyPool,
-    onKeyRevoked,
-  } = rt;
+function makePerf(rt: RuntimeState, provider: string): PerfMiddleware | undefined {
+  const perf = rt.perf;
+  if (!perf) return undefined;
 
-  const perfEnabled = config.performance;
-  function makePerf(provider: string): PerfMiddleware | undefined {
-    if (!perf) return undefined;
-    const p: PerfMiddleware = {};
-    if (perfEnabled.cache.enabled) p.cache = perf.cache;
-    if (perfEnabled.circuitBreaker.enabled) p.circuitBreaker = perf.circuitBreaker;
-    if (perfEnabled.singleFlight.enabled) p.singleFlight = perf.singleFlight;
-    p.limiter = perf.limiter;
-    p.metrics = perf.metrics;
-    return p;
-  }
-
-  const requestTimeoutMs = config.request_timeout_ms;
-  const maxAttemptsPerRequest = config.max_attempts_per_request;
-
-  const tavilyBaseUrl = normalizeBaseUrl(config.tavily?.base_url, "https://api.tavily.com");
-  const exaBaseUrl = normalizeBaseUrl(config.exa?.base_url, "https://api.exa.ai");
-  const perplexityBaseUrl = normalizeBaseUrl(config.perplexity?.base_url, "https://api.perplexity.ai");
-  const jinaBaseUrl = normalizeBaseUrl(config.jina?.base_url, "https://r.jina.ai");
-  const cfBaseUrl = normalizeBaseUrl(config.cloudflare?.base_url, "https://api.cloudflare.com/client/v4");
-
-  const jinaReaderTimeoutSeconds = Math.max(1, Math.min(180, Math.ceil(requestTimeoutMs / 1000)));
-  const jinaReaderFixedHeaders: Record<string, string> = {
-    Accept: "text/plain",
-    "Content-Type": "application/json",
-    "X-Respond-With": "markdown",
-    "X-Retain-Images": "none",
-    "X-Retain-Links": "text",
-    "X-Cache-Tolerance": "3600",
-    "X-Timeout": String(jinaReaderTimeoutSeconds),
-    DNT: "1",
+  const middleware: PerfMiddleware = {
+    limiter: perf.limiter,
+    metrics: perf.metrics,
   };
 
+  if (rt.config.performance.cache.enabled) {
+    middleware.cache = perf.cache;
+  }
+  if (rt.config.performance.circuitBreaker.enabled) {
+    middleware.circuitBreaker = perf.getCircuitBreaker(provider);
+  }
+  if (rt.config.performance.singleFlight.enabled) {
+    middleware.singleFlight = perf.singleFlight;
+  }
+
+  return middleware;
+}
+
+function getRuntimeRequestConfig(runtimeStateRef: RuntimeStateRefLike) {
+  const rt = runtimeStateRef.current;
+  const config = rt.config;
+
+  return {
+    rt,
+    config,
+    requestTimeoutMs: config.request_timeout_ms,
+    maxAttemptsPerRequest: config.max_attempts_per_request,
+  };
+}
+
+export function createTavilyToolHandler(runtimeStateRef: RuntimeStateRefLike) {
+  return async (input: Record<string, unknown>) => {
+    const { rt, config, requestTimeoutMs, maxAttemptsPerRequest } =
+      getRuntimeRequestConfig(runtimeStateRef);
+    const tavilyBaseUrl = normalizeBaseUrl(
+      config.tavily?.base_url,
+      "https://api.tavily.com",
+    );
+
+    const payload = compactObject({
+      query: input.query,
+      max_results: input.max_results,
+      search_depth: input.search_depth,
+      topic: input.topic,
+      time_range: input.time_range,
+      include_domains: input.include_domains,
+      exclude_domains: input.exclude_domains,
+      include_answer: input.include_answer,
+      include_raw_content: input.include_raw_content,
+      include_images: input.include_images,
+      include_image_descriptions: input.include_image_descriptions,
+      include_favicon: input.include_favicon,
+      auto_parameters: input.auto_parameters,
+      include_usage: input.include_usage,
+    });
+
+    const { data, attempts } = await callWithPerf({
+      providerName: "tavily",
+      keyPool: rt.tavilyKeyPool,
+      timeoutMs: requestTimeoutMs,
+      configuredMaxAttempts: maxAttemptsPerRequest,
+      onKeyRevoked: rt.onKeyRevoked,
+      perf: makePerf(rt, "tavily"),
+      cacheKey: `tavily:search:${JSON.stringify(payload)}`,
+      buildRequest: (apiKey) => ({
+        url: `${tavilyBaseUrl}/search`,
+        init: {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify(payload),
+        },
+      }),
+    });
+
+    const response =
+      data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+    const normalized = {
+      provider: "tavily",
+      attempts,
+      request_id:
+        typeof response.request_id === "string" ? response.request_id : null,
+      query: typeof response.query === "string" ? response.query : input.query,
+      answer: typeof response.answer === "string" ? response.answer : null,
+      response_time:
+        typeof response.response_time === "number"
+          ? response.response_time
+          : null,
+      usage:
+        response.usage && typeof response.usage === "object"
+          ? response.usage
+          : null,
+      images: normalizeResults(response.images),
+      results: normalizeResults(response.results),
+    };
+
+    return {
+      content: [{ type: "text", text: stringifyForToolContent(normalized) }],
+      structuredContent: normalized,
+    };
+  };
+}
+
+function registerTools(server: McpServer, runtimeStateRef: RuntimeStateRefLike): void {
   // --- search_tavily ---
   server.registerTool(
     "search_tavily",
@@ -117,60 +185,7 @@ function registerTools(server: McpServer, rt: RuntimeState): void {
       },
       annotations: { readOnlyHint: true },
     },
-    async (input) => {
-      const payload = compactObject({
-        query: input.query,
-        max_results: input.max_results,
-        search_depth: input.search_depth,
-        topic: input.topic,
-        time_range: input.time_range,
-        include_domains: input.include_domains,
-        exclude_domains: input.exclude_domains,
-        include_answer: input.include_answer,
-        include_raw_content: input.include_raw_content,
-        include_images: input.include_images,
-        include_image_descriptions: input.include_image_descriptions,
-        include_favicon: input.include_favicon,
-        auto_parameters: input.auto_parameters,
-        include_usage: input.include_usage,
-      });
-
-      const { data, attempts } = await callWithPerf({
-        providerName: "tavily",
-        keyPool: tavilyKeyPool,
-        timeoutMs: requestTimeoutMs,
-        configuredMaxAttempts: maxAttemptsPerRequest,
-        onKeyRevoked,
-        perf: makePerf("tavily"),
-        cacheKey: `tavily:search:${JSON.stringify(payload)}`,
-        buildRequest: (apiKey) => ({
-          url: `${tavilyBaseUrl}/search`,
-          init: {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-            body: JSON.stringify(payload),
-          },
-        }),
-      });
-
-      const response = data && typeof data === "object" ? data as Record<string, unknown> : {};
-      const normalized = {
-        provider: "tavily",
-        attempts,
-        request_id: typeof response.request_id === "string" ? response.request_id : null,
-        query: typeof response.query === "string" ? response.query : input.query,
-        answer: typeof response.answer === "string" ? response.answer : null,
-        response_time: typeof response.response_time === "number" ? response.response_time : null,
-        usage: response.usage && typeof response.usage === "object" ? response.usage : null,
-        images: normalizeResults(response.images),
-        results: normalizeResults(response.results),
-      };
-
-      return {
-        content: [{ type: "text", text: stringifyForToolContent(normalized) }],
-        structuredContent: normalized,
-      };
-    },
+    createTavilyToolHandler(runtimeStateRef),
   );
 
   // --- search_exa ---
@@ -201,8 +216,14 @@ function registerTools(server: McpServer, rt: RuntimeState): void {
       annotations: { readOnlyHint: true },
     },
     async (input) => {
+      const { rt, config, requestTimeoutMs, maxAttemptsPerRequest } =
+        getRuntimeRequestConfig(runtimeStateRef);
       const includeText = input.include_text !== false;
       const includeHighlights = input.include_highlights !== false;
+      const exaBaseUrl = normalizeBaseUrl(
+        config.exa?.base_url,
+        "https://api.exa.ai",
+      );
 
       const summary =
         input.include_summary || input.summary_query
@@ -233,11 +254,11 @@ function registerTools(server: McpServer, rt: RuntimeState): void {
 
       const { data, attempts } = await callWithPerf({
         providerName: "exa",
-        keyPool: exaKeyPool,
+        keyPool: rt.exaKeyPool,
         timeoutMs: requestTimeoutMs,
         configuredMaxAttempts: maxAttemptsPerRequest,
-        onKeyRevoked,
-        perf: makePerf("exa"),
+        onKeyRevoked: rt.onKeyRevoked,
+        perf: makePerf(rt, "exa"),
         cacheKey: `exa:search:${JSON.stringify(payload)}`,
         buildRequest: (apiKey) => ({
           url: `${exaBaseUrl}/search`,
@@ -283,6 +304,12 @@ function registerTools(server: McpServer, rt: RuntimeState): void {
       annotations: { readOnlyHint: true },
     },
     async (input) => {
+      const { rt, config, requestTimeoutMs, maxAttemptsPerRequest } =
+        getRuntimeRequestConfig(runtimeStateRef);
+      const perplexityBaseUrl = normalizeBaseUrl(
+        config.perplexity?.base_url,
+        "https://api.perplexity.ai",
+      );
       const payload = compactObject({
         query: input.query,
         max_results: input.max_results ?? 10,
@@ -292,11 +319,11 @@ function registerTools(server: McpServer, rt: RuntimeState): void {
 
       const { data, attempts } = await callWithPerf({
         providerName: "perplexity",
-        keyPool: perplexityKeyPool,
+        keyPool: rt.perplexityKeyPool,
         timeoutMs: requestTimeoutMs,
         configuredMaxAttempts: maxAttemptsPerRequest,
-        onKeyRevoked,
-        perf: makePerf("perplexity"),
+        onKeyRevoked: rt.onKeyRevoked,
+        perf: makePerf(rt, "perplexity"),
         cacheKey: `perplexity:search:${JSON.stringify(payload)}`,
         buildRequest: (apiKey) => ({
           url: `${perplexityBaseUrl}/search`,
@@ -340,6 +367,26 @@ function registerTools(server: McpServer, rt: RuntimeState): void {
       annotations: { readOnlyHint: true },
     },
     async (input) => {
+      const { rt, config, requestTimeoutMs, maxAttemptsPerRequest } =
+        getRuntimeRequestConfig(runtimeStateRef);
+      const jinaBaseUrl = normalizeBaseUrl(
+        config.jina?.base_url,
+        "https://r.jina.ai",
+      );
+      const jinaReaderTimeoutSeconds = Math.max(
+        1,
+        Math.min(180, Math.ceil(requestTimeoutMs / 1000)),
+      );
+      const jinaReaderFixedHeaders: Record<string, string> = {
+        Accept: "text/plain",
+        "Content-Type": "application/json",
+        "X-Respond-With": "markdown",
+        "X-Retain-Images": "none",
+        "X-Retain-Links": "text",
+        "X-Cache-Tolerance": "3600",
+        "X-Timeout": String(jinaReaderTimeoutSeconds),
+        DNT: "1",
+      };
       const headers: Record<string, string> = { ...jinaReaderFixedHeaders };
       if (input.wait_for_selector) headers["X-Wait-For-Selector"] = input.wait_for_selector;
       if (input.target_selector) headers["X-Target-Selector"] = input.target_selector;
@@ -354,14 +401,14 @@ function registerTools(server: McpServer, rt: RuntimeState): void {
         },
       });
 
-      const response: RequestResult = jinaKeyPool.hasKeys()
+      const response: RequestResult = rt.jinaKeyPool.hasKeys()
         ? await callWithPerf({
             providerName: "jina",
-            keyPool: jinaKeyPool,
+            keyPool: rt.jinaKeyPool,
             timeoutMs: requestTimeoutMs,
             configuredMaxAttempts: maxAttemptsPerRequest,
-            onKeyRevoked,
-            perf: makePerf("jina"),
+            onKeyRevoked: rt.onKeyRevoked,
+            perf: makePerf(rt, "jina"),
             cacheKey: `jina:fetch:${input.url}`,
             buildRequest: (apiKey) => buildRequest(apiKey as string),
             extractData: (r) => r.rawText,
@@ -378,7 +425,7 @@ function registerTools(server: McpServer, rt: RuntimeState): void {
         provider: "jina_reader",
         attempts: response.attempts,
         url: input.url,
-        authenticated: jinaKeyPool.hasKeys(),
+        authenticated: rt.jinaKeyPool.hasKeys(),
       };
 
       return {
@@ -449,7 +496,14 @@ function registerTools(server: McpServer, rt: RuntimeState): void {
       annotations: { readOnlyHint: true },
     },
     async (input) => {
-      if (!cloudflareKeyPool.hasKeys()) {
+      const { rt, config, requestTimeoutMs, maxAttemptsPerRequest } =
+        getRuntimeRequestConfig(runtimeStateRef);
+      const cfBaseUrl = normalizeBaseUrl(
+        config.cloudflare?.base_url,
+        "https://api.cloudflare.com/client/v4",
+      );
+
+      if (!rt.cloudflareKeyPool.hasKeys()) {
         throw new Error("cloudflare: no credentials configured. Add accounts to config.jsonc.");
       }
 
@@ -476,11 +530,11 @@ function registerTools(server: McpServer, rt: RuntimeState): void {
 
       const { data, attempts } = await callWithPerf({
         providerName: "cloudflare",
-        keyPool: cloudflareKeyPool,
+        keyPool: rt.cloudflareKeyPool,
         timeoutMs: requestTimeoutMs,
         configuredMaxAttempts: maxAttemptsPerRequest,
-        onKeyRevoked,
-        perf: makePerf("cloudflare"),
+        onKeyRevoked: rt.onKeyRevoked,
+        perf: makePerf(rt, "cloudflare"),
         cacheKey: `cloudflare:fetch:${input.url ?? ""}:${input.html ? "html" : ""}`,
         buildRequest: (cred) => {
           const c = cred as { accountId: string; token: string };
@@ -519,13 +573,13 @@ function registerTools(server: McpServer, rt: RuntimeState): void {
   );
 }
 
-export function createMcpServer(rt: RuntimeState): McpServer {
+export function createMcpServer(runtimeStateRef: RuntimeStateRefLike): McpServer {
   const server = new McpServer({
     name: "meta-search",
     version: "2.0.0",
   });
 
-  registerTools(server, rt);
+  registerTools(server, runtimeStateRef);
   return server;
 }
 
