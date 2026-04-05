@@ -4,30 +4,30 @@
 
 @layer base {
   :root {
-    --background: 222 47% 8%;
-    --foreground: 208 80% 96%;
-    --card: 222 39% 11%;
-    --card-foreground: 210 40% 96%;
-    --popover: 223 37% 12%;
-    --popover-foreground: 210 40% 96%;
-    --primary: 197 100% 59%;
-    --primary-foreground: 221 47% 9%;
-    --secondary: 218 31% 18%;
-    --secondary-foreground: 210 40% 96%;
-    --muted: 218 29% 16%;
-    --muted-foreground: 214 24% 72%;
-    --accent: 199 89% 60%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 351 92% 64%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 213 32% 24%;
-    --input: 217 30% 20%;
-    --ring: 197 100% 59%;
-    --success: 151 61% 47%;
-    --success-foreground: 151 80% 88%;
-    --warning: 37 92% 57%;
-    --warning-foreground: 45 100% 86%;
-    --radius: 1rem;
+    --background: 210 20% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 221 83% 53%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 214 32% 91%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 221 83% 53%;
+    --success: 142 72% 29%;
+    --success-foreground: 138 62% 94%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 31 92% 18%;
+    --radius: 0.875rem;
   }
 
   * {
@@ -41,10 +41,9 @@
   body {
     @apply min-h-screen bg-background font-sans text-foreground antialiased;
     background:
-      radial-gradient(circle at 12% 18%, rgba(21, 174, 255, 0.22), transparent 28%),
-      radial-gradient(circle at 82% 12%, rgba(62, 220, 173, 0.12), transparent 24%),
-      radial-gradient(circle at 50% 100%, rgba(255, 170, 31, 0.08), transparent 34%),
-      linear-gradient(180deg, #08111f 0%, #091424 48%, #050b15 100%);
+      radial-gradient(circle at top left, rgba(59, 130, 246, 0.09), transparent 28%),
+      radial-gradient(circle at right top, rgba(16, 185, 129, 0.05), transparent 22%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 1));
   }
 
   body::before,
@@ -59,19 +58,19 @@
   }
 
   body::before {
-    top: -10rem;
-    right: -8rem;
-    height: 24rem;
-    width: 24rem;
-    background: rgba(48, 170, 255, 0.12);
+    top: -8rem;
+    right: -5rem;
+    height: 16rem;
+    width: 16rem;
+    background: rgba(59, 130, 246, 0.08);
   }
 
   body::after {
-    bottom: -12rem;
-    left: -8rem;
-    height: 22rem;
-    width: 22rem;
-    background: rgba(84, 211, 156, 0.08);
+    bottom: -10rem;
+    left: -6rem;
+    height: 18rem;
+    width: 18rem;
+    background: rgba(148, 163, 184, 0.08);
   }
 
   a {
@@ -86,40 +85,20 @@
   }
 
   ::selection {
-    background: rgba(74, 194, 255, 0.3);
-    color: white;
+    background: rgba(59, 130, 246, 0.18);
+    color: inherit;
   }
 }
 
 @layer components {
-  .hero-grid {
-    @apply relative overflow-hidden rounded-[2rem] border border-border/70 bg-card/80 p-6 shadow-panel backdrop-blur-xl sm:p-8;
-    background:
-      radial-gradient(circle at 100% 0%, rgba(17, 176, 255, 0.28), transparent 28%),
-      linear-gradient(135deg, rgba(14, 27, 50, 0.92), rgba(10, 18, 32, 0.86));
-  }
-
-  .hero-grid::after {
-    content: "";
-    position: absolute;
-    right: -3rem;
-    top: -2rem;
-    height: 12rem;
-    width: 12rem;
-    border-radius: 999px;
-    background: rgba(56, 189, 248, 0.12);
-    filter: blur(28px);
-    pointer-events: none;
-  }
-
   .data-grid {
     @apply grid gap-4 md:grid-cols-2 xl:grid-cols-4;
   }
 
   .subtle-grid {
     background-image:
-      linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-    background-size: 32px 32px;
+      linear-gradient(rgba(148, 163, 184, 0.1) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(148, 163, 184, 0.1) 1px, transparent 1px);
+    background-size: 28px 28px;
   }
 }
