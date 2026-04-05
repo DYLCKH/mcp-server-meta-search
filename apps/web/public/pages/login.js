@@ -1,20 +1,47 @@
 export function render(state) {
   if (state.authenticated) {
-    // Already authenticated, will redirect
     return '<div class="loading">Redirecting...</div>';
   }
+
   return `
     <div class="login-wrapper">
-      <div class="login-box">
-        <h1>Meta Search Admin</h1>
-        <div id="login-alert"></div>
-        <form id="login-form">
-          <div class="form-group">
-            <label for="password">Password</label>
-            <input type="password" id="password" name="password" placeholder="Enter admin password" required autofocus>
+      <div class="login-shell">
+        <section class="login-hero">
+          <p class="page-kicker">Meta Search</p>
+          <h1>Operate the search stack without losing context.</h1>
+          <p>
+            One control surface for provider health, token lifecycle, runtime settings, and audit visibility.
+          </p>
+          <div class="login-feature-list">
+            <div class="login-feature">
+              <strong>Provider posture</strong>
+              <span>Inspect active, disabled, and revoked keys instantly.</span>
+            </div>
+            <div class="login-feature">
+              <strong>Live policy</strong>
+              <span>Adjust retries, rotation strategy, and recovery timing safely.</span>
+            </div>
+            <div class="login-feature">
+              <strong>Traceability</strong>
+              <span>Review request flow and audit history from the same surface.</span>
+            </div>
           </div>
-          <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;">Sign In</button>
-        </form>
+        </section>
+        <section class="login-panel">
+          <div class="login-panel-head">
+            <span class="badge badge-active">Admin Access</span>
+            <h2>Sign in to continue</h2>
+            <p>Use the server-side admin password configured for this environment.</p>
+          </div>
+          <div id="login-alert"></div>
+          <form id="login-form" class="login-form">
+            <div class="form-group">
+              <label for="password">Password</label>
+              <input type="password" id="password" name="password" placeholder="Enter admin password" required autofocus>
+            </div>
+            <button type="submit" class="btn btn-primary login-submit">Sign In</button>
+          </form>
+        </section>
       </div>
     </div>
   `;
@@ -26,6 +53,7 @@ export function init(root, api, state, navigate) {
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
+
     const btn = form.querySelector('button');
     const password = form.querySelector('#password').value;
     btn.disabled = true;
@@ -37,9 +65,15 @@ export function init(root, api, state, navigate) {
       state.authenticated = true;
       navigate('#/dashboard');
     } catch (err) {
-      alertEl.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+      alertEl.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
       btn.disabled = false;
       btn.textContent = 'Sign In';
     }
   });
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = String(str ?? '');
+  return div.innerHTML;
 }

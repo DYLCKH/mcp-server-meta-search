@@ -1,30 +1,48 @@
+const PAGE_SIZE = 50;
+
 export function render() {
   return `
-    <div id="logs-page">
-      <h1>Logs</h1>
-      <div class="tabs" id="log-tabs">
-        <button class="tab active" data-tab="requests">Request Logs</button>
-        <button class="tab" data-tab="audit">Audit Logs</button>
-      </div>
-      <div id="log-filters"></div>
-      <div id="log-content">
-        <div class="loading"><div class="spinner"></div> Loading...</div>
+    <div id="logs-page" class="page-shell">
+      <section class="page-hero">
+        <div>
+          <p class="page-kicker">Observability</p>
+          <h1 class="page-title">Request and audit trails</h1>
+          <p class="page-description">
+            Filter recent request outcomes and operator actions from one place so investigations do not require database access.
+          </p>
+        </div>
+      </section>
+      <section class="card">
+        <div class="section-header section-header-tight">
+          <div>
+            <p class="section-kicker">Filters</p>
+            <h2 class="section-title">Slice the event stream</h2>
+            <p class="section-subtitle">Switch between request and audit logs, then narrow by time or target.</p>
+          </div>
+          <div class="tabs" id="log-tabs">
+            <button class="tab active" data-tab="requests" type="button">Request Logs</button>
+            <button class="tab" data-tab="audit" type="button">Audit Logs</button>
+          </div>
+        </div>
+        <div id="log-filters"></div>
+      </section>
+      <div id="log-content" class="section-stack">
+        <div class="loading"><div class="spinner"></div> Loading logs</div>
       </div>
     </div>
   `;
 }
 
-export async function init(root, api, state, navigate) {
+export async function init(root, api) {
   const tabs = root.querySelector('#log-tabs');
   const filtersEl = root.querySelector('#log-filters');
   const content = root.querySelector('#log-content');
 
   let currentTab = 'requests';
   let page = 0;
-  const PAGE_SIZE = 50;
 
   async function loadLogs() {
-    content.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    content.innerHTML = '<div class="loading"><div class="spinner"></div> Loading logs</div>';
 
     const filters = getFilters(filtersEl);
     const params = { limit: PAGE_SIZE, offset: page * PAGE_SIZE, ...filters };
@@ -42,20 +60,37 @@ export async function init(root, api, state, navigate) {
     }
   }
 
+  function bindFilterForm() {
+    const form = filtersEl.querySelector('#log-filter-form');
+    const resetBtn = filtersEl.querySelector('#reset-filters');
+
+    form?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      page = 0;
+      loadLogs();
+    });
+
+    resetBtn?.addEventListener('click', () => {
+      form.reset();
+      page = 0;
+      loadLogs();
+    });
+  }
+
   function renderFilters() {
     if (currentTab === 'requests') {
       filtersEl.innerHTML = `
-        <div class="filters">
+        <form class="filters" id="log-filter-form">
           <div class="form-group">
-            <label>Tool</label>
-            <input type="text" id="filter-tool" placeholder="Filter by tool">
+            <label for="filter-tool">Tool</label>
+            <input type="text" id="filter-tool" placeholder="e.g. web.search">
           </div>
           <div class="form-group">
-            <label>Provider</label>
-            <input type="text" id="filter-provider" placeholder="Filter by provider">
+            <label for="filter-provider">Provider</label>
+            <input type="text" id="filter-provider" placeholder="e.g. exa">
           </div>
           <div class="form-group">
-            <label>Status</label>
+            <label for="filter-status">Status</label>
             <select id="filter-status">
               <option value="">All</option>
               <option value="success">Success</option>
@@ -63,51 +98,54 @@ export async function init(root, api, state, navigate) {
             </select>
           </div>
           <div class="form-group">
-            <label>From</label>
+            <label for="filter-from">From</label>
             <input type="datetime-local" id="filter-from">
           </div>
           <div class="form-group">
-            <label>To</label>
+            <label for="filter-to">To</label>
             <input type="datetime-local" id="filter-to">
           </div>
-          <button class="btn btn-primary" id="apply-filters" style="align-self:flex-end">Filter</button>
-        </div>
+          <div class="filter-actions">
+            <button class="btn btn-primary" type="submit">Apply filters</button>
+            <button class="btn" type="button" id="reset-filters">Reset</button>
+          </div>
+        </form>
       `;
     } else {
       filtersEl.innerHTML = `
-        <div class="filters">
+        <form class="filters" id="log-filter-form">
           <div class="form-group">
-            <label>Action</label>
-            <input type="text" id="filter-action" placeholder="Filter by action">
+            <label for="filter-action">Action</label>
+            <input type="text" id="filter-action" placeholder="e.g. create_pat">
           </div>
           <div class="form-group">
-            <label>Target</label>
-            <input type="text" id="filter-target" placeholder="Filter by target">
+            <label for="filter-target">Target</label>
+            <input type="text" id="filter-target" placeholder="e.g. provider">
           </div>
           <div class="form-group">
-            <label>From</label>
+            <label for="filter-from">From</label>
             <input type="datetime-local" id="filter-from">
           </div>
           <div class="form-group">
-            <label>To</label>
+            <label for="filter-to">To</label>
             <input type="datetime-local" id="filter-to">
           </div>
-          <button class="btn btn-primary" id="apply-filters" style="align-self:flex-end">Filter</button>
-        </div>
+          <div class="filter-actions">
+            <button class="btn btn-primary" type="submit">Apply filters</button>
+            <button class="btn" type="button" id="reset-filters">Reset</button>
+          </div>
+        </form>
       `;
     }
 
-    filtersEl.querySelector('#apply-filters')?.addEventListener('click', () => {
-      page = 0;
-      loadLogs();
-    });
+    bindFilterForm();
   }
 
-  // Tab switching
   tabs.addEventListener('click', (e) => {
     const tab = e.target.closest('.tab');
     if (!tab) return;
-    tabs.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+
+    tabs.querySelectorAll('.tab').forEach((item) => item.classList.remove('active'));
     tab.classList.add('active');
     currentTab = tab.dataset.tab;
     page = 0;
@@ -115,11 +153,11 @@ export async function init(root, api, state, navigate) {
     loadLogs();
   });
 
-  // Pagination delegated events
   content.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-page]');
     if (!btn) return;
-    page = parseInt(btn.dataset.page);
+
+    page = Number.parseInt(btn.dataset.page, 10);
     loadLogs();
   });
 
@@ -144,21 +182,29 @@ function getFilters(filtersEl) {
   if (target) params.target = target;
   if (from) params.from = new Date(from).toISOString();
   if (to) params.to = new Date(to).toISOString();
+
   return params;
 }
 
 function renderRequestLogs(data) {
   const logs = data.logs || data || [];
-  const total = data.total || logs.length;
   const hasMore = data.hasMore || false;
   const offset = data.offset || 0;
 
   if (!logs.length) {
-    return '<div class="card"><p class="text-muted">No request logs found.</p></div>';
+    return '<div class="empty-state"><h3>No request logs found</h3><p>Try widening the time range or removing a filter.</p></div>';
   }
 
   return `
-    <div class="card">
+    <section class="card table-card">
+      <div class="section-header section-header-tight">
+        <div>
+          <p class="section-kicker">Requests</p>
+          <h2 class="section-title">Latest provider traffic</h2>
+          <p class="section-subtitle">Showing ${logs.length} entries from the current page.</p>
+        </div>
+        <span class="badge ${hasMore ? 'badge-active' : 'badge-disabled'}">${hasMore ? 'More available' : 'Newest page'}</span>
+      </div>
       <div class="table-wrap">
         <table>
           <thead>
@@ -172,40 +218,45 @@ function renderRequestLogs(data) {
             </tr>
           </thead>
           <tbody>
-            ${logs.map(log => `
+            ${logs.map((log) => `
               <tr>
-                <td class="text-muted mono">${formatDate(log.timestamp || log.createdAt)}</td>
-                <td>${escapeHtml(log.tool || '-')}</td>
-                <td>${escapeHtml(log.provider || '-')}</td>
-                <td>
-                  <span class="badge ${log.status === 'success' ? 'badge-active' : 'badge-revoked'}">
-                    ${escapeHtml(log.status || '-')}
-                  </span>
+                <td data-label="Timestamp" class="mono">${formatDate(log.timestamp || log.createdAt)}</td>
+                <td data-label="Tool">${escapeHtml(log.tool || '-')}</td>
+                <td data-label="Provider">${escapeHtml(log.provider || '-')}</td>
+                <td data-label="Status">
+                  <span class="badge ${statusBadgeClass(log.status)}">${escapeHtml(log.status || '-')}</span>
                 </td>
-                <td class="mono">${formatDuration(log.latency || log.durationMs)}</td>
-                <td class="text-muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(log.error || '')}">${escapeHtml(log.error || '-')}</td>
+                <td data-label="Latency" class="mono">${formatDuration(log.latency || log.durationMs)}</td>
+                <td data-label="Error" class="cell-truncate" title="${escapeHtml(log.error || '')}">${escapeHtml(log.error || '-')}</td>
               </tr>
             `).join('')}
           </tbody>
         </table>
       </div>
-    </div>
-    ${renderPagination(offset, logs.length, total, hasMore)}
+    </section>
+    ${renderPagination(offset, logs.length, hasMore)}
   `;
 }
 
 function renderAuditLogs(data) {
   const logs = data.logs || data || [];
-  const total = data.total || logs.length;
   const hasMore = data.hasMore || false;
   const offset = data.offset || 0;
 
   if (!logs.length) {
-    return '<div class="card"><p class="text-muted">No audit logs found.</p></div>';
+    return '<div class="empty-state"><h3>No audit logs found</h3><p>Try widening the time range or removing a filter.</p></div>';
   }
 
   return `
-    <div class="card">
+    <section class="card table-card">
+      <div class="section-header section-header-tight">
+        <div>
+          <p class="section-kicker">Audit</p>
+          <h2 class="section-title">Latest admin actions</h2>
+          <p class="section-subtitle">Showing ${logs.length} entries from the current page.</p>
+        </div>
+        <span class="badge ${hasMore ? 'badge-active' : 'badge-disabled'}">${hasMore ? 'More available' : 'Newest page'}</span>
+      </div>
       <div class="table-wrap">
         <table>
           <thead>
@@ -217,41 +268,49 @@ function renderAuditLogs(data) {
             </tr>
           </thead>
           <tbody>
-            ${logs.map(log => `
+            ${logs.map((log) => `
               <tr>
-                <td class="text-muted mono">${formatDate(log.timestamp || log.createdAt)}</td>
-                <td><strong>${escapeHtml(log.action || '-')}</strong></td>
-                <td class="mono">${escapeHtml(log.target || '-')}</td>
-                <td class="text-muted" style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(log.details || log.detail || '')}">${escapeHtml(log.details || log.detail || '-')}</td>
+                <td data-label="Timestamp" class="mono">${formatDate(log.timestamp || log.createdAt)}</td>
+                <td data-label="Action"><span class="table-primary">${escapeHtml(log.action || '-')}</span></td>
+                <td data-label="Target" class="mono">${escapeHtml(log.target || '-')}</td>
+                <td data-label="Details" class="cell-truncate" title="${escapeHtml(log.details || log.detail || '')}">
+                  ${escapeHtml(log.details || log.detail || '-')}
+                </td>
               </tr>
             `).join('')}
           </tbody>
         </table>
       </div>
-    </div>
-    ${renderPagination(offset, logs.length, total, hasMore)}
+    </section>
+    ${renderPagination(offset, logs.length, hasMore)}
   `;
 }
 
-function renderPagination(offset, count, total, hasMore) {
-  const page = Math.floor(offset / 50);
-  const from = offset + 1;
+function renderPagination(offset, count, hasMore) {
+  const page = Math.floor(offset / PAGE_SIZE);
+  const from = count ? offset + 1 : 0;
   const to = offset + count;
+
   return `
     <div class="pagination">
-      <span>Showing ${from}-${to} of ${total}</span>
+      <span>Page ${page + 1} · Showing ${from}-${to}</span>
       <div class="pagination-buttons">
-        <button class="btn btn-sm" data-page="${page - 1}" ${page === 0 ? 'disabled' : ''}>Previous</button>
-        <button class="btn btn-sm" data-page="${page + 1}" ${!hasMore ? 'disabled' : ''}>Next</button>
+        <button class="btn btn-sm" type="button" data-page="${page - 1}" ${page === 0 ? 'disabled' : ''}>Previous</button>
+        <button class="btn btn-sm" type="button" data-page="${page + 1}" ${!hasMore ? 'disabled' : ''}>Next</button>
       </div>
     </div>
   `;
 }
 
+function statusBadgeClass(status) {
+  if (status === 'success') return 'badge-active';
+  if (status === 'error') return 'badge-revoked';
+  return 'badge-disabled';
+}
+
 function escapeHtml(str) {
-  if (!str) return '';
   const div = document.createElement('div');
-  div.textContent = str;
+  div.textContent = String(str ?? '');
   return div.innerHTML;
 }
 

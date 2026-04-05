@@ -99,21 +99,26 @@ const api = {
       credentials: 'same-origin',
       ...options,
     });
+
     if (res.status === 401) {
       location.hash = '#/login';
       throw new Error('Unauthorized');
     }
+
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.error || `HTTP ${res.status}`);
     }
+
     return res.json();
   },
 
-  // Auth
-  login: (password) => api.request('/auth/login', { method: 'POST', body: JSON.stringify({ password }) }),
+  login: (password) =>
+    api.request('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    }),
 
-  // Dashboard
   async getDashboard() {
     const data = await api.request('/dashboard');
     return {
@@ -123,11 +128,11 @@ const api = {
     };
   },
 
-  // Providers
   async getProviders() {
     const data = await api.request('/providers');
     return { ...data, providers: normalizeProviderSummaries(data) };
   },
+
   async getProvider(name) {
     const data = await api.request(`/providers/${encodeURIComponent(name)}`);
     return {
@@ -135,11 +140,13 @@ const api = {
       keys: ensureArray(data.keys).map(normalizeProviderKey),
     };
   },
+
   addKey: (name, key) =>
     api.request(`/providers/${encodeURIComponent(name)}/keys`, {
       method: 'POST',
       body: JSON.stringify({ api_key: key }),
     }),
+
   updateKey: (name, index, data) => {
     const payload = Object.prototype.hasOwnProperty.call(data, 'enabled')
       ? { disabled: !data.enabled }
@@ -150,13 +157,15 @@ const api = {
       body: JSON.stringify(payload),
     });
   },
-  deleteKey: (name, index) => api.request(`/providers/${encodeURIComponent(name)}/keys/${index}`, { method: 'DELETE' }),
 
-  // PATs
+  deleteKey: (name, index) =>
+    api.request(`/providers/${encodeURIComponent(name)}/keys/${index}`, { method: 'DELETE' }),
+
   async getPats() {
     const data = await api.request('/pats');
     return { ...data, pats: ensureArray(data.pats).map(normalizePat) };
   },
+
   createPat: (data) =>
     api.request('/pats', {
       method: 'POST',
@@ -166,11 +175,15 @@ const api = {
         expires_at: data.expiresAt ?? data.expires_at,
       }),
     }),
+
   async getPat(name) {
     const data = await api.request(`/pats/${encodeURIComponent(name)}`);
     return normalizePat(data);
   },
-  revealPat: (name) => api.request(`/pats/${encodeURIComponent(name)}/reveal`, { method: 'POST' }),
+
+  revealPat: (name) =>
+    api.request(`/pats/${encodeURIComponent(name)}/reveal`, { method: 'POST' }),
+
   updatePat: (name, data) => {
     const payload = { ...data };
     if (Object.prototype.hasOwnProperty.call(payload, 'enabled')) {
@@ -181,18 +194,23 @@ const api = {
       payload.expires_at = payload.expiresAt;
       delete payload.expiresAt;
     }
+
     return api.request(`/pats/${encodeURIComponent(name)}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
     });
   },
-  deletePat: (name) => api.request(`/pats/${encodeURIComponent(name)}`, { method: 'DELETE' }),
 
-  // Settings
+  deletePat: (name) =>
+    api.request(`/pats/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+
   getSettings: () => api.request('/settings'),
-  saveSettings: (data) => api.request('/settings', { method: 'PUT', body: JSON.stringify(data) }),
+  saveSettings: (data) =>
+    api.request('/settings', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
 
-  // Logs
   async getRequestLogs(params = {}) {
     const data = await api.request(`/logs/requests${buildQueryString(params)}`);
     return {
@@ -200,6 +218,7 @@ const api = {
       logs: ensureArray(data.logs).map(normalizeRequestLog),
     };
   },
+
   async getAuditLogs(params = {}) {
     const query = { ...params };
     if (Object.prototype.hasOwnProperty.call(query, 'target')) {
@@ -215,10 +234,30 @@ const api = {
   },
 };
 
-// Simple state
-const state = { authenticated: false };
+const PAGE_META = {
+  dashboard: {
+    label: 'Dashboard',
+    description: 'Fleet health, key capacity, and token posture at a glance.',
+  },
+  providers: {
+    label: 'Providers',
+    description: 'Inspect provider pools, rotate keys, and recover degraded capacity.',
+  },
+  pats: {
+    label: 'PATs',
+    description: 'Manage personal access tokens used to authenticate downstream clients.',
+  },
+  settings: {
+    label: 'Settings',
+    description: 'Tune retry, timeout, and key lifecycle policy without redeploying.',
+  },
+  logs: {
+    label: 'Logs',
+    description: 'Trace request outcomes and audit sensitive admin actions.',
+  },
+};
 
-// Page modules loaded dynamically
+const state = { authenticated: false, notify: showToast };
 const pageModules = {};
 
 async function loadPage(name) {
@@ -229,7 +268,6 @@ async function loadPage(name) {
   return pageModules[name];
 }
 
-// Router
 function navigate(hash) {
   location.hash = hash;
 }
@@ -239,7 +277,6 @@ async function handleRoute() {
   const [, path] = hash.match(/^#(\/[^?]*)/) || ['', '/dashboard'];
   const content = document.getElementById('app');
 
-  // Public routes
   if (path === '/login') {
     const page = await loadPage('login');
     content.innerHTML = page.render(state);
@@ -247,7 +284,6 @@ async function handleRoute() {
     return;
   }
 
-  // Protected routes - check auth
   if (!state.authenticated) {
     try {
       await api.getDashboard();
@@ -273,60 +309,153 @@ async function handleRoute() {
   }
 
   const page = await loadPage(pageName);
-
-  // Render shell with sidebar for protected pages
   content.innerHTML = renderShell(pageName);
-  document.getElementById('page-content').innerHTML = page.render(state);
+
+  const pageContent = document.getElementById('page-content');
+  pageContent.innerHTML = page.render(state);
   initShell(content);
 
   try {
-    await page.init(document.getElementById('page-content'), api, state, navigate);
+    await page.init(pageContent, api, state, navigate);
   } catch (err) {
-    document.getElementById('page-content').innerHTML = `<div class="alert alert-error">Error: ${escapeHtml(err.message)}</div>`;
+    pageContent.innerHTML = `<div class="alert alert-error">Error: ${escapeHtml(err.message)}</div>`;
   }
 }
 
 function renderShell(activePage) {
   const navItems = [
-    { href: '#/dashboard', label: 'Dashboard', id: 'dashboard' },
-    { href: '#/providers', label: 'Providers', id: 'providers' },
-    { href: '#/pats', label: 'PATs', id: 'pats' },
-    { href: '#/settings', label: 'Settings', id: 'settings' },
-    { href: '#/logs', label: 'Logs', id: 'logs' },
+    { href: '#/dashboard', label: 'Dashboard', description: 'Health and capacity', id: 'dashboard' },
+    { href: '#/providers', label: 'Providers', description: 'Key pools and status', id: 'providers' },
+    { href: '#/pats', label: 'PATs', description: 'Token lifecycle', id: 'pats' },
+    { href: '#/settings', label: 'Settings', description: 'Runtime policy', id: 'settings' },
+    { href: '#/logs', label: 'Logs', description: 'Requests and audit', id: 'logs' },
   ];
+  const activeMeta = PAGE_META[activePage] || PAGE_META.dashboard;
 
   return `
     <div class="app-layout">
-      <aside class="sidebar">
-        <div class="sidebar-brand">Meta Search</div>
+      <div class="app-backdrop" id="nav-backdrop"></div>
+      <aside class="sidebar" id="app-sidebar">
+        <div class="sidebar-brand">
+          <span class="sidebar-eyebrow">Meta Search</span>
+          <strong>Control Center</strong>
+          <p>Operate providers, tokens, and runtime policy from one secure surface.</p>
+        </div>
         <ul class="sidebar-nav">
-          ${navItems.map(item => `
-            <li><a href="${item.href}" class="${item.id === activePage ? 'active' : ''}">${item.label}</a></li>
+          ${navItems.map((item) => `
+            <li>
+              <a href="${item.href}" class="sidebar-link ${item.id === activePage ? 'active' : ''}">
+                <span class="sidebar-link-copy">
+                  <span class="sidebar-link-label">${item.label}</span>
+                  <span class="sidebar-link-desc">${item.description}</span>
+                </span>
+                <span class="sidebar-link-dot" aria-hidden="true"></span>
+              </a>
+            </li>
           `).join('')}
         </ul>
         <div class="sidebar-footer">
-          <button id="logout-btn">Sign out</button>
+          <div class="sidebar-footnote">
+            <span class="sidebar-footnote-label">Current view</span>
+            <strong>${activeMeta.label}</strong>
+          </div>
+          <button id="logout-btn" class="btn btn-ghost sidebar-logout" type="button">Sign out</button>
         </div>
       </aside>
-      <main class="main-content" id="page-content"></main>
+      <div class="app-main">
+        <header class="topbar">
+          <div class="topbar-inner">
+            <button id="nav-toggle" class="nav-toggle" type="button" aria-label="Open navigation">
+              <span></span>
+              <span></span>
+              <span></span>
+            </button>
+            <div class="topbar-copy">
+              <span class="topbar-label">Secure Admin Surface</span>
+              <strong class="topbar-heading">Meta Search Control Center</strong>
+              <p class="topbar-subtitle">${activeMeta.description}</p>
+            </div>
+            <div class="topbar-meta">
+              <span class="topbar-chip">${activeMeta.label}</span>
+              <span class="topbar-chip subtle">Live configuration</span>
+            </div>
+          </div>
+        </header>
+        <main class="main-content">
+          <div class="content-shell" id="page-content"></div>
+        </main>
+      </div>
     </div>
   `;
 }
 
 function initShell(content) {
+  const navToggle = document.getElementById('nav-toggle');
+  const navBackdrop = document.getElementById('nav-backdrop');
   const logoutBtn = document.getElementById('logout-btn');
+  const navLinks = content.querySelectorAll('.sidebar-link');
+  const closeNav = () => document.body.classList.remove('nav-open');
+
+  closeNav();
+
+  navToggle?.addEventListener('click', () => {
+    document.body.classList.toggle('nav-open');
+  });
+
+  navBackdrop?.addEventListener('click', closeNav);
+  navLinks.forEach((link) => link.addEventListener('click', closeNav));
+
   if (logoutBtn) {
     logoutBtn.addEventListener('click', async () => {
-      try { await fetch(`${API_BASE}/auth/logout`, { method: 'POST', credentials: 'same-origin' }); } catch {}
+      try {
+        await fetch(`${API_BASE}/auth/logout`, { method: 'POST', credentials: 'same-origin' });
+      } catch {}
+
       state.authenticated = false;
+      closeNav();
       navigate('#/login');
     });
   }
 }
 
+function ensureToastRoot() {
+  let root = document.getElementById('toast-root');
+  if (!root) {
+    root = document.createElement('div');
+    root.id = 'toast-root';
+    root.className = 'toast-stack';
+    root.setAttribute('aria-live', 'polite');
+    root.setAttribute('aria-atomic', 'true');
+    document.body.appendChild(root);
+  }
+  return root;
+}
+
+function showToast(message, type = 'info') {
+  const root = ensureToastRoot();
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.innerHTML = `<div class="toast-body">${escapeHtml(message)}</div>`;
+  root.appendChild(toast);
+
+  requestAnimationFrame(() => {
+    toast.classList.add('visible');
+  });
+
+  const removeToast = () => {
+    toast.classList.remove('visible');
+    window.setTimeout(() => {
+      toast.remove();
+    }, 180);
+  };
+
+  window.setTimeout(removeToast, 3200);
+  toast.addEventListener('click', removeToast, { once: true });
+}
+
 function escapeHtml(str) {
   const div = document.createElement('div');
-  div.textContent = str;
+  div.textContent = String(str ?? '');
   return div.innerHTML;
 }
 
@@ -341,7 +470,6 @@ function formatDuration(ms) {
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
-// Boot
 window.addEventListener('hashchange', handleRoute);
 handleRoute();
 
