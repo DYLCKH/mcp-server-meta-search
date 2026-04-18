@@ -25,7 +25,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -43,7 +42,6 @@ import { formatDate } from "@/lib/format";
 export function ProvidersPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [summaries, setSummaries] = useState<ProviderSummary[]>([]);
-  const [selected, setSelected] = useState("");
   const [detail, setDetail] = useState<ProviderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -54,23 +52,17 @@ export function ProvidersPage() {
   const [providerScope, setProviderScope] = useState<
     "all" | "healthy" | "attention"
   >("all");
+  const requestedProvider = searchParams.get("provider") ?? "";
+  const selected = summaries.some((provider) => provider.name === requestedProvider)
+    ? requestedProvider
+    : summaries[0]?.name ?? "";
 
-  async function loadProviders(preferred?: string) {
+  async function loadProviders() {
     setLoading(true);
 
     try {
       const response = await api.getProviders();
-      const nextSummaries = response.providers;
-      const requested = searchParams.get("provider");
-      const preferredName = preferred || requested || selected;
-      const nextSelected = nextSummaries.some(
-        (provider) => provider.name === preferredName,
-      )
-        ? preferredName
-        : nextSummaries[0]?.name || "";
-
-      setSummaries(nextSummaries);
-      setSelected(nextSelected);
+      setSummaries(response.providers);
       setError("");
     } catch (requestError) {
       setError(extractErrorMessage(requestError));
@@ -84,31 +76,30 @@ export function ProvidersPage() {
   }, []);
 
   useEffect(() => {
-    const requested = searchParams.get("provider");
-
-    if (
-      requested &&
-      requested !== selected &&
-      summaries.some((provider) => provider.name === requested)
-    ) {
-      setSelected(requested);
+    if (loading || requestedProvider === selected) {
+      return;
     }
-  }, [searchParams, selected, summaries]);
+
+    const nextParams = new URLSearchParams(searchParams);
+    if (selected) {
+      nextParams.set("provider", selected);
+    } else {
+      nextParams.delete("provider");
+    }
+    setSearchParams(nextParams, { replace: true });
+  }, [loading, requestedProvider, searchParams, selected, setSearchParams]);
 
   useEffect(() => {
     if (!selected) {
       setDetail(null);
+      setDetailError("");
+      setDetailLoading(false);
       return;
-    }
-
-    if (searchParams.get("provider") !== selected) {
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.set("provider", selected);
-      setSearchParams(nextParams, { replace: true });
     }
 
     let active = true;
     setDetailLoading(true);
+    setDetailError("");
 
     void (async () => {
       try {
@@ -121,6 +112,7 @@ export function ProvidersPage() {
         setDetailError("");
       } catch (requestError) {
         if (active) {
+          setDetail(null);
           setDetailError(extractErrorMessage(requestError));
         }
       } finally {
@@ -133,7 +125,7 @@ export function ProvidersPage() {
     return () => {
       active = false;
     };
-  }, [searchParams, selected, setSearchParams]);
+  }, [selected]);
 
   const selectedSummary =
     summaries.find((provider) => provider.name === selected) ?? null;
@@ -168,7 +160,7 @@ export function ProvidersPage() {
     try {
       await api.updateKey(selected, index, { enabled: !key.enabled });
       toast.success(`${selected} key updated`);
-      await loadProviders(selected);
+      await loadProviders();
     } catch (requestError) {
       toast.error(extractErrorMessage(requestError));
     }
@@ -186,7 +178,7 @@ export function ProvidersPage() {
     try {
       await api.deleteKey(selected, index);
       toast.success(`Deleted key from ${selected}`);
-      await loadProviders(selected);
+      await loadProviders();
     } catch (requestError) {
       toast.error(extractErrorMessage(requestError));
     }
@@ -195,9 +187,8 @@ export function ProvidersPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        badge="Provider pools"
-        title="Provider 容量与 key 健康面板"
-        description="先筛选 provider，再在右侧工作区集中处理 key 启停和替换。"
+        badge="Providers"
+        title="Keys"
         actions={
           <>
             <Button
@@ -210,7 +201,7 @@ export function ProvidersPage() {
               disabled={!providerQuery && providerScope === "all"}
             >
               <Filter className="h-4 w-4" />
-              Reset filters
+              Reset
             </Button>
             <Button size="sm" onClick={() => setAddKeyOpen(true)} disabled={!selectedSummary}>
               <Plus className="h-4 w-4" />
@@ -246,17 +237,12 @@ export function ProvidersPage() {
       ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
-        <Card className="xl:sticky xl:top-24 xl:h-fit">
-          <CardHeader className="gap-3 border-b bg-muted/20">
-            <div className="flex items-center justify-between gap-3">
-              <div className="space-y-1.5">
-                <Badge variant="secondary" className="w-fit">
-                  Provider rail
-                </Badge>
-                <CardTitle>Choose a working set</CardTitle>
-                <CardDescription>
-                  左侧只负责检索和切换上下文，不在列表里混入编辑动作。
-                </CardDescription>
+        <Card className="xl:sticky xl:top-20 xl:h-fit">
+          <CardHeader className="gap-2 border-b bg-muted/20 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">Rail</Badge>
+                <CardTitle className="text-sm">Providers</CardTitle>
               </div>
               <Badge variant="outline">
                 {loading ? "..." : `${visibleSummaries.length}/${summaries.length}`}
@@ -298,7 +284,11 @@ export function ProvidersPage() {
                     <button
                       key={provider.name}
                       type="button"
-                      onClick={() => setSelected(provider.name)}
+                      onClick={() => {
+                        const nextParams = new URLSearchParams(searchParams);
+                        nextParams.set("provider", provider.name);
+                        setSearchParams(nextParams);
+                      }}
                       className={cn(
                         "w-full rounded-lg border px-3 py-3 text-left transition-colors",
                         isSelected
@@ -333,41 +323,28 @@ export function ProvidersPage() {
                 })}
               </div>
             ) : (
-              <EmptyState
-                title="No providers match"
-                description="Clear or widen the filters to bring pools back into the rail."
-              />
+              <EmptyState title="No matches" />
             )}
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="gap-4 border-b bg-muted/20 md:flex-row md:items-start md:justify-between">
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="secondary">{selectedSummary?.name || "Provider"}</Badge>
-                {selectedSummary ? (
-                  <>
-                    <Badge variant={selectedHasAttention ? "warning" : "success"}>
-                      {selectedHasAttention ? "Needs review" : "Stable"}
-                    </Badge>
-                    <Badge variant="outline">Total {selectedSummary.total}</Badge>
-                    <Badge variant="success">Active {selectedSummary.activeKeys}</Badge>
-                    <Badge variant="warning">Disabled {selectedSummary.disabledKeys}</Badge>
-                    <Badge variant="destructive">Revoked {selectedSummary.revokedKeys}</Badge>
-                  </>
-                ) : (
-                  <Badge variant="outline">No selection</Badge>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <CardTitle className="capitalize">
-                  {selectedSummary?.name || "Select a provider"} workspace
-                </CardTitle>
-                <CardDescription>
-                  右侧工作区保留容量判断、操作说明和逐条 key 处理。
-                </CardDescription>
-              </div>
+          <CardHeader className="gap-2 border-b bg-muted/20 p-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="secondary" className="capitalize">{selectedSummary?.name || "Provider"}</Badge>
+              {selectedSummary ? (
+                <>
+                  <Badge variant={selectedHasAttention ? "warning" : "success"}>
+                    {selectedHasAttention ? "Review" : "Stable"}
+                  </Badge>
+                  <Badge variant="outline">Total {selectedSummary.total}</Badge>
+                  <Badge variant="success">Active {selectedSummary.activeKeys}</Badge>
+                  <Badge variant="warning">Disabled {selectedSummary.disabledKeys}</Badge>
+                  <Badge variant="destructive">Revoked {selectedSummary.revokedKeys}</Badge>
+                </>
+              ) : (
+                <Badge variant="outline">None</Badge>
+              )}
             </div>
             <div className="flex items-center gap-2">
               {selectedSummary ? (
@@ -379,14 +356,11 @@ export function ProvidersPage() {
               </Button>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4 p-4">
+          <CardContent className="space-y-3 p-3">
             {!selectedSummary ? (
-              <EmptyState
-                title="No provider selected"
-                description="Pick a provider from the rail to open its credential workspace."
-              />
+              <EmptyState title="Select a provider" />
             ) : detailLoading ? (
-              <LoadingState label="Loading provider details" compact />
+              <LoadingState label="Loading" compact />
             ) : detailError ? (
               <StateAlert
                 tone="error"
@@ -394,82 +368,35 @@ export function ProvidersPage() {
                 message={detailError}
               />
             ) : (
-              <div className="space-y-4">
-                <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
-                  <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="space-y-1.5">
-                        <p className="text-sm font-medium">
-                          {selectedHasAttention
-                            ? "This pool is degraded and should be reviewed before traffic shifts toward it."
-                            : "This pool is healthy and can keep receiving traffic."}
-                        </p>
-                        <p className="text-sm leading-6 text-muted-foreground">
-                          优先替换 revoked key，再决定 disabled key 是否需要恢复。
-                        </p>
-                      </div>
-                      <Badge variant={selectedHasAttention ? "warning" : "success"}>
-                        {selectedHasAttention ? "Degraded" : "Healthy"}
-                      </Badge>
-                    </div>
-                    <MixBar
-                      active={selectedSummary.activeKeys}
-                      disabled={selectedSummary.disabledKeys}
-                      revoked={selectedSummary.revokedKeys}
-                      total={selectedSummary.total}
+              <div className="space-y-3">
+                <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+                  <MixBar
+                    active={selectedSummary.activeKeys}
+                    disabled={selectedSummary.disabledKeys}
+                    revoked={selectedSummary.revokedKeys}
+                    total={selectedSummary.total}
+                  />
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <LegendStat
+                      label="Active"
+                      value={selectedSummary.activeKeys}
+                      tone="success"
                     />
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      <LegendStat
-                        label="Active"
-                        value={selectedSummary.activeKeys}
-                        tone="success"
-                      />
-                      <LegendStat
-                        label="Disabled"
-                        value={selectedSummary.disabledKeys}
-                        tone="warning"
-                      />
-                      <LegendStat
-                        label="Revoked"
-                        value={selectedSummary.revokedKeys}
-                        tone="destructive"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium">Operator notes</p>
-                      <p className="text-sm leading-6 text-muted-foreground">
-                        先控制风险，再做清理或恢复，避免把唯一仍在承载流量的凭据误下线。
-                      </p>
-                    </div>
-                    <div className="space-y-2 text-sm text-muted-foreground">
-                      <div className="rounded-md border bg-background px-3 py-2">
-                        Disable suspicious keys first, then delete them after replacement is verified.
-                      </div>
-                      <div className="rounded-md border bg-background px-3 py-2">
-                        Revoked keys cannot be re-enabled and should be replaced instead of recovered.
-                      </div>
-                      <div className="rounded-md border bg-background px-3 py-2">
-                        Use last-used timestamps to avoid rotating out the only credential still serving traffic.
-                      </div>
-                    </div>
+                    <LegendStat
+                      label="Disabled"
+                      value={selectedSummary.disabledKeys}
+                      tone="warning"
+                    />
+                    <LegendStat
+                      label="Revoked"
+                      value={selectedSummary.revokedKeys}
+                      tone="destructive"
+                    />
                   </div>
                 </div>
 
                 {detail?.keys?.length ? (
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium">Credential inventory</p>
-                        <p className="text-sm text-muted-foreground">
-                          逐条处理启停和删除动作，减少在长列表中来回扫描。
-                        </p>
-                      </div>
-                      <Badge variant="outline">{detail.keys.length} rows</Badge>
-                    </div>
-                    <Table>
+                  <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Credential</TableHead>
@@ -520,12 +447,8 @@ export function ProvidersPage() {
                         ))}
                       </TableBody>
                     </Table>
-                  </div>
                 ) : (
-                  <EmptyState
-                    title="No keys configured"
-                    description="Add a new key to start serving traffic through this provider."
-                  />
+                  <EmptyState title="No keys configured" />
                 )}
               </div>
             )}
@@ -538,7 +461,7 @@ export function ProvidersPage() {
         provider={selectedSummary?.name ?? ""}
         onOpenChange={setAddKeyOpen}
         onAdded={async () => {
-          await loadProviders(selectedSummary?.name);
+          await loadProviders();
         }}
       />
     </div>

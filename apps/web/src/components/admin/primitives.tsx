@@ -9,8 +9,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -19,37 +17,28 @@ import { Skeleton } from "@/components/ui/skeleton";
 export function PageHeader({
   badge,
   title,
-  description,
   actions,
   stats,
 }: {
   badge: string;
   title: string;
-  description: string;
   actions?: ReactNode;
   stats?: ReactNode;
 }) {
   return (
     <Card className="border-border/80 bg-card/95">
-      <CardContent className="flex flex-col gap-4 p-4 md:p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-3">
-            <Badge variant="secondary" className="w-fit">
-              {badge}
-            </Badge>
-            <div className="space-y-1.5">
-              <CardTitle className="text-2xl tracking-tight sm:text-3xl">
-                {title}
-              </CardTitle>
-              <CardDescription className="max-w-3xl text-sm leading-6">
-                {description}
-              </CardDescription>
-            </div>
+      <CardContent className="flex flex-col gap-3 p-3 md:p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary">{badge}</Badge>
+            <CardTitle className="text-lg font-semibold tracking-tight sm:text-xl">
+              {title}
+            </CardTitle>
           </div>
           {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
         </div>
         {stats ? (
-          <div className="rounded-lg border bg-muted/20 p-3 md:p-4">{stats}</div>
+          <div className="rounded-lg border bg-muted/20 p-2.5">{stats}</div>
         ) : null}
       </CardContent>
     </Card>
@@ -145,18 +134,13 @@ export function StateAlert({
 
 export function EmptyState({
   title,
-  description,
 }: {
   title: string;
-  description: string;
 }) {
   return (
     <Card className="border-dashed shadow-none">
-      <CardContent className="py-8 text-center">
-        <p className="text-sm font-medium">{title}</p>
-        <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-          {description}
-        </p>
+      <CardContent className="py-6 text-center">
+        <p className="text-sm text-muted-foreground">{title}</p>
       </CardContent>
     </Card>
   );

@@ -15,3 +15,5 @@ Thumbs.db
 config.jsonc
 invalid-keys.json
 package-lock.json
+apps/server/src/embedded-assets.generated.ts
+dist-bin/

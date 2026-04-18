@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { z } from "zod";
 import {
   KeyPool,
@@ -583,8 +583,8 @@ export function createMcpServer(runtimeStateRef: RuntimeStateRefLike): McpServer
   return server;
 }
 
-export function createTransport(): StreamableHTTPServerTransport {
-  return new StreamableHTTPServerTransport({
+export function createTransport(): WebStandardStreamableHTTPServerTransport {
+  return new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
   });
 }

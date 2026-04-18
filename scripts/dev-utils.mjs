@@ -5,7 +5,7 @@ import { dirname, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-const PNPM_BIN = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+const BUN_BIN = process.env.BUN_BIN || (process.platform === "win32" ? "bun.exe" : "bun");
 const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
 const DEV_STATE_FILE = resolve(SCRIPTS_DIR, "..", ".dev-runtime", "ports.json");
 
@@ -146,8 +146,8 @@ export async function clearDevState(serverPort) {
   await rm(DEV_STATE_FILE, { force: true });
 }
 
-export function spawnPnpm(args, env = {}) {
-  return spawn(PNPM_BIN, args, {
+export function spawnBun(args, env = {}) {
+  return spawn(BUN_BIN, args, {
     stdio: "inherit",
     env: {
       ...process.env,

@@ -7,7 +7,7 @@ import {
   getServerPort,
   getWebHost,
   getWebPort,
-  spawnPnpm,
+  spawnBun,
   writeDevState,
   clearDevState,
   waitForExit,
@@ -45,13 +45,14 @@ process.stdout.write(
 
 await writeDevState({ serverPort });
 
-const server = spawnPnpm(["--filter", "@meta-search/server", "dev"], {
+const server = spawnBun(["run", "--filter", "@meta-search/server", "dev"], {
   PORT: String(serverPort),
   HOST: serverHost,
 });
 
-const web = spawnPnpm(
+const web = spawnBun(
   [
+    "run",
     "--filter",
     "@meta-search/web",
     "dev",

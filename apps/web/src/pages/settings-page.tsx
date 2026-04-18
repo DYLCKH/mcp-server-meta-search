@@ -15,7 +15,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -91,7 +90,7 @@ export function SettingsPage() {
       const response = await api.saveSettings(form);
       setInitialSettings(response.settings);
       setForm(response.settings);
-      setSavedMessage("Settings saved and applied immediately.");
+      setSavedMessage("Applied");
       toast.success("Settings saved");
     } catch (requestError) {
       setError(extractErrorMessage(requestError));
@@ -113,9 +112,8 @@ export function SettingsPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        badge="Runtime policy"
-        title="运行时策略编辑台"
-        description="直接修改超时、重试与 key 生命周期参数，保存后立即生效。"
+        badge="Policy"
+        title="Runtime"
         actions={
           <>
             <Button
@@ -128,7 +126,7 @@ export function SettingsPage() {
               Revert
             </Button>
             <Button size="sm" onClick={handleSave} disabled={!hasChanges || saving || !form}>
-              {saving ? "Saving..." : "Save changes"}
+              {saving ? "Saving..." : "Save"}
             </Button>
           </>
         }
@@ -165,21 +163,16 @@ export function SettingsPage() {
         <StateAlert tone="success" title="Policy updated" message={savedMessage} />
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
         <div className="space-y-4">
           <Card>
-            <CardHeader className="gap-3 border-b bg-muted/20">
-              <Badge variant="secondary" className="w-fit">
-                Traffic orchestration
-              </Badge>
-              <div className="space-y-1">
-                <CardTitle>How requests move through the fleet</CardTitle>
-                <CardDescription>
-                  这些设置决定 key 选择策略、请求耐心和重试压力。
-                </CardDescription>
+            <CardHeader className="gap-2 border-b bg-muted/20 p-3">
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">Traffic</Badge>
+                <CardTitle className="text-sm">Routing</CardTitle>
               </div>
             </CardHeader>
-            <CardContent className="p-4">
+            <CardContent className="p-3">
               {loading || !form ? (
                 <LoadingState label="Loading settings" compact />
               ) : (
@@ -187,7 +180,6 @@ export function SettingsPage() {
                   <SettingsFieldShell
                     id="key_rotation_strategy"
                     label={FIELD_META.key_rotation_strategy.label}
-                    description={FIELD_META.key_rotation_strategy.description}
                     input={
                       <Select
                         value={form.key_rotation_strategy}
@@ -208,7 +200,6 @@ export function SettingsPage() {
                   <SettingsNumberField
                     id="max_attempts_per_request"
                     label={FIELD_META.max_attempts_per_request.label}
-                    description={FIELD_META.max_attempts_per_request.description}
                     value={form.max_attempts_per_request}
                     onChange={(value) =>
                       setForm({ ...form, max_attempts_per_request: value })
@@ -217,7 +208,6 @@ export function SettingsPage() {
                   <SettingsNumberField
                     id="request_timeout_ms"
                     label={FIELD_META.request_timeout_ms.label}
-                    description={FIELD_META.request_timeout_ms.description}
                     value={form.request_timeout_ms}
                     onChange={(value) => setForm({ ...form, request_timeout_ms: value })}
                   />
@@ -227,18 +217,13 @@ export function SettingsPage() {
           </Card>
 
           <Card>
-            <CardHeader className="gap-3 border-b bg-muted/20">
-              <Badge variant="secondary" className="w-fit">
-                Key lifecycle
-              </Badge>
-              <div className="space-y-1">
-                <CardTitle>How damaged credentials recover or fail out</CardTitle>
-                <CardDescription>
-                  这里控制 key 被隔离多久，以及何时被视为不可恢复。
-                </CardDescription>
+            <CardHeader className="gap-2 border-b bg-muted/20 p-3">
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">Lifecycle</Badge>
+                <CardTitle className="text-sm">Keys</CardTitle>
               </div>
             </CardHeader>
-            <CardContent className="p-4">
+            <CardContent className="p-3">
               {loading || !form ? (
                 <LoadingState label="Loading settings" compact />
               ) : (
@@ -246,7 +231,6 @@ export function SettingsPage() {
                   <SettingsNumberField
                     id="key_recovery_interval_ms"
                     label={FIELD_META.key_recovery_interval_ms.label}
-                    description={FIELD_META.key_recovery_interval_ms.description}
                     value={form.key_recovery_interval_ms}
                     onChange={(value) =>
                       setForm({ ...form, key_recovery_interval_ms: value })
@@ -255,7 +239,6 @@ export function SettingsPage() {
                   <SettingsNumberField
                     id="max_disable_before_revoke"
                     label={FIELD_META.max_disable_before_revoke.label}
-                    description={FIELD_META.max_disable_before_revoke.description}
                     value={form.max_disable_before_revoke}
                     onChange={(value) =>
                       setForm({ ...form, max_disable_before_revoke: value })
@@ -267,57 +250,31 @@ export function SettingsPage() {
           </Card>
         </div>
 
-        <div className="space-y-4 xl:sticky xl:top-24 xl:h-fit">
+        <div className="space-y-4 xl:sticky xl:top-20 xl:h-fit">
           <Card>
-            <CardHeader className="gap-3 border-b bg-muted/20">
-              <Badge variant="secondary" className="w-fit">
-                Change summary
-              </Badge>
-              <CardTitle>{changedFields.length ? "Pending edits" : "No unsaved changes"}</CardTitle>
+            <CardHeader className="gap-2 border-b bg-muted/20 p-3">
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">Diff</Badge>
+                <CardTitle className="text-sm">
+                  {changedFields.length ? `${changedFields.length} pending` : "Clean"}
+                </CardTitle>
+              </div>
             </CardHeader>
-            <CardContent className="p-4">
+            <CardContent className="p-3">
               {changedFields.length ? (
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {changedFields.map((field) => (
                     <div
                       key={field}
-                      className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-3"
+                      className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm font-medium"
                     >
-                      <p className="font-medium">{FIELD_META[field].label}</p>
-                      <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                        {FIELD_META[field].description}
-                      </p>
+                      {FIELD_META[field].label}
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 dark:border-emerald-900 dark:bg-emerald-950/60">
-                  <p className="font-medium">Policy matches runtime</p>
-                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                    The form is aligned with the latest values loaded from the server.
-                  </p>
-                </div>
+                <p className="text-sm text-muted-foreground">No pending edits</p>
               )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="gap-3 border-b bg-muted/20">
-              <Badge variant="secondary" className="w-fit">
-                Operator notes
-              </Badge>
-              <CardTitle>Safer change patterns</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 p-4 text-sm leading-6 text-muted-foreground">
-              <div className="rounded-md border bg-muted/30 px-3 py-2">
-                Increase timeout and retries together only when upstream latency is the problem. Raising one without the other usually just shifts failure modes.
-              </div>
-              <div className="rounded-md border bg-muted/30 px-3 py-2">
-                Short recovery intervals can oscillate degraded keys back into rotation too early. Use them only when instability is transient.
-              </div>
-              <div className="rounded-md border bg-muted/30 px-3 py-2">
-                Lower revoke thresholds make the system more conservative, but they also require faster key replacement discipline.
-              </div>
             </CardContent>
           </Card>
         </div>
@@ -329,13 +286,11 @@ export function SettingsPage() {
 function SettingsNumberField({
   id,
   label,
-  description,
   value,
   onChange,
 }: {
   id: string;
   label: string;
-  description: string;
   value: number;
   onChange: (value: number) => void;
 }) {
@@ -343,7 +298,6 @@ function SettingsNumberField({
     <SettingsFieldShell
       id={id}
       label={label}
-      description={description}
       input={
         <Input
           id={id}
@@ -359,19 +313,18 @@ function SettingsNumberField({
 function SettingsFieldShell({
   id,
   label,
-  description,
   input,
 }: {
   id: string;
   label: string;
-  description: string;
   input: ReactNode;
 }) {
   return (
-    <div className="space-y-3 rounded-lg border bg-background p-4 shadow-sm">
-      <Label htmlFor={id}>{label}</Label>
+    <div className="space-y-1.5 rounded-md border bg-background p-3">
+      <Label htmlFor={id} className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </Label>
       {input}
-      <p className="text-sm leading-6 text-muted-foreground">{description}</p>
     </div>
   );
 }

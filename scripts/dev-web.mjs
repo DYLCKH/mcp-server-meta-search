@@ -6,7 +6,7 @@ import {
   getDisplayHost,
   getWebHost,
   getWebPort,
-  spawnPnpm,
+  spawnBun,
   waitForExit,
 } from "./dev-utils.mjs";
 
@@ -28,8 +28,9 @@ const proxyTarget =
 process.stdout.write(`[dev] Web UI: http://${getDisplayHost(host)}:${port}/app/\n`);
 process.stdout.write(`[dev] API proxy: ${proxyTarget}\n`);
 
-const child = spawnPnpm(
+const child = spawnBun(
   [
+    "run",
     "--filter",
     "@meta-search/web",
     "dev",

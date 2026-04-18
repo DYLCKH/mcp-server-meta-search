@@ -72,8 +72,8 @@ export function CreatePatDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Create PAT</DialogTitle>
-          <DialogDescription>
-            令牌只会在创建成功后展示一次，建议同时写明使用场景与到期时间。
+          <DialogDescription className="sr-only">
+            Create a new personal access token.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -210,9 +210,9 @@ export function AddKeyDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle className="capitalize">Add key for {provider || "provider"}</DialogTitle>
-          <DialogDescription>
-            写入成功后会立即更新运行时配置，请确保凭据已经验证可用。
+          <DialogTitle className="capitalize">Add {provider || "provider"} key</DialogTitle>
+          <DialogDescription className="sr-only">
+            Add a new credential for {provider || "provider"}.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">

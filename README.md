@@ -31,45 +31,41 @@ apps/
 ### Local Development
 
 ```bash
-# Prerequisites: Node.js >= 20, pnpm >= 10
+# Prerequisites: Bun >= 1.3
 
 # Clone and install
 git clone https://github.com/lieyan666/mcp-server-meta-search.git
 cd mcp-server-meta-search
-pnpm install
+bun install
 
 # Copy and edit config
 cp config.jsonc.example config.jsonc
 # Edit config.jsonc with your API keys
 
 # Build and run
-pnpm build
-pnpm dev
+bun run build
+bun run dev
 ```
 
-`pnpm dev` now starts both the API server and the admin WebUI, and it will
+`bun run dev` now starts both the API server and the admin WebUI, and it will
 pick the next free port automatically if `3000` or `5173` is already in use.
 
-### Docker
+### Single-Binary Build
 
 ```bash
-# Copy example config and edit
-cp config.jsonc.example config.jsonc
+# Current platform
+bun run build:binary
 
-# Build and start
-docker compose up -d
-
-# View logs
-docker compose logs -f meta-search
+# Specific release target
+bun run build:binary --target bun-linux-x64
 ```
 
 ### Manual Build
 
 ```bash
-pnpm install --frozen-lockfile
-pnpm build
-pnpm -r prune --prod
-node apps/server/dist/index.js
+bun install --frozen-lockfile
+bun run build
+bun run start
 ```
 
 ## Configuration
@@ -252,20 +248,23 @@ active --(auth error 401/402/403)--> disabled --(recovery timeout)--> active
 
 ## Deployment
 
-### Docker
+Docker packaging is no longer maintained. The supported deployment targets are:
+
+- running the built server with Bun
+- shipping a Bun-compiled single binary
+
+### Binary Deployment
 
 ```bash
-# Build and run
-docker compose up -d
+bun install --frozen-lockfile
+bun run build:binary --target bun-linux-x64
 
-# Follow logs
-docker compose logs -f meta-search
-
-# Stop
-docker compose down
+# Start the compiled server
+./dist-bin/meta-search-linux-x64
 ```
 
-The Docker image runs as a production Node.js process on port 3000. Mount `config.jsonc` and a volume for the SQLite database.
+The binary reads the same `CONFIG_PATH`, `LOGS_DB_PATH`, `PORT`, and `HOST`
+environment variables as the source-mode server.
 
 ### Reverse Proxy
 
@@ -311,25 +310,25 @@ search.example.com {
 ### Systemd
 
 ```bash
-# 1. Build the project
-pnpm install --frozen-lockfile && pnpm build && pnpm -r prune --prod
+# 1. Build the Linux binary
+bun install --frozen-lockfile
+bun run build:binary --target bun-linux-x64
 
-# 2. Copy to install location
-sudo cp -r . /opt/meta-search
-
-# 3. Create system user
+# 2. Create system user
 sudo useradd -r -s /bin/false meta-search
+
+# 3. Install binary and config
+sudo install -d -o meta-search -g meta-search /opt/meta-search /opt/meta-search/data
+sudo install -m 755 dist-bin/meta-search-linux-x64 /opt/meta-search/meta-search
+sudo install -m 640 config.jsonc /opt/meta-search/config.jsonc
 sudo chown -R meta-search:meta-search /opt/meta-search
 
-# 4. Create data directory
-sudo -u meta-search mkdir -p /opt/meta-search/data
-
-# 5. Install and start service
+# 4. Install and start service
 sudo cp deploy/meta-search.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now meta-search
 
-# 6. Check status
+# 5. Check status
 sudo systemctl status meta-search
 journalctl -u meta-search -f
 ```
@@ -384,5 +383,4 @@ Admin flow:
 
 ## Requirements
 
-- Node.js >= 20 (ESM support required)
-- pnpm >= 10
+- Bun >= 1.3

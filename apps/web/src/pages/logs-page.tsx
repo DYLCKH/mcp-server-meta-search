@@ -29,9 +29,7 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -140,18 +138,17 @@ export function LogsPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        badge="Observability"
-        title="请求与审计日志工作台"
-        description="在同一视图里切换 request log 和 audit log，直接按时间、状态和目标缩小排查范围。"
+        badge="Logs"
+        title="Observability"
         stats={
           <SummaryStats
             items={[
               {
-                label: "Request rows",
+                label: "Requests",
                 value: requestData ? String(requestData.logs.length) : "...",
               },
               {
-                label: "Audit rows",
+                label: "Audit",
                 value: auditData ? String(auditData.logs.length) : "...",
               },
               {
@@ -164,19 +161,13 @@ export function LogsPage() {
       />
 
       <Card>
-        <CardHeader className="gap-4 border-b bg-muted/20 md:flex-row md:items-start md:justify-between">
-          <div className="space-y-1.5">
-            <Badge variant="secondary" className="w-fit">
-              Filters
-            </Badge>
-            <CardTitle>Slice the event stream</CardTitle>
-            <CardDescription>
-              不再依赖数据库查询，直接在界面里切换数据流并应用服务端分页。
-            </CardDescription>
+        <CardHeader className="gap-2 border-b bg-muted/20 p-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary">Filters</Badge>
           </div>
-          <Badge variant="outline">Server-backed pagination</Badge>
+          <Badge variant="outline">Server-paginated</Badge>
         </CardHeader>
-        <CardContent className="space-y-4 p-4">
+        <CardContent className="space-y-3 p-3">
           <Tabs
             value={activeTab}
             onValueChange={(value) => setActiveTab(value as "requests" | "audit")}
@@ -374,21 +365,16 @@ export function LogsPage() {
 
       {activeTab === "requests" ? (
         <Card>
-          <CardHeader className="gap-4 border-b bg-muted/20 md:flex-row md:items-start md:justify-between">
-            <div className="space-y-1.5">
-              <Badge variant="secondary" className="w-fit">
-                Requests
-              </Badge>
-              <CardTitle>Latest provider traffic</CardTitle>
-              <CardDescription>
-                Showing {currentRequestData.length} entries from the current page.
-              </CardDescription>
+          <CardHeader className="gap-2 border-b bg-muted/20 p-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary">Requests</Badge>
+              <span className="text-sm text-muted-foreground">{currentRequestData.length} rows</span>
             </div>
             <Badge variant={requestData?.hasMore ? "success" : "outline"}>
-              {requestData?.hasMore ? "More available" : "Newest page"}
+              {requestData?.hasMore ? "More" : "End"}
             </Badge>
           </CardHeader>
-          <CardContent className="space-y-3 p-4">
+          <CardContent className="space-y-3 p-3">
             {loading ? (
               <LoadingState label="Loading request logs" compact />
             ) : currentRequestData.length ? (
@@ -436,30 +422,22 @@ export function LogsPage() {
                 />
               </>
             ) : (
-              <EmptyState
-                title="No request logs found"
-                description="Try widening the time range or removing a filter."
-              />
+              <EmptyState title="No request logs" />
             )}
           </CardContent>
         </Card>
       ) : (
         <Card>
-          <CardHeader className="gap-4 border-b bg-muted/20 md:flex-row md:items-start md:justify-between">
-            <div className="space-y-1.5">
-              <Badge variant="secondary" className="w-fit">
-                Audit
-              </Badge>
-              <CardTitle>Latest admin actions</CardTitle>
-              <CardDescription>
-                Showing {currentAuditData.length} entries from the current page.
-              </CardDescription>
+          <CardHeader className="gap-2 border-b bg-muted/20 p-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary">Audit</Badge>
+              <span className="text-sm text-muted-foreground">{currentAuditData.length} rows</span>
             </div>
             <Badge variant={auditData?.hasMore ? "success" : "outline"}>
-              {auditData?.hasMore ? "More available" : "Newest page"}
+              {auditData?.hasMore ? "More" : "End"}
             </Badge>
           </CardHeader>
-          <CardContent className="space-y-3 p-4">
+          <CardContent className="space-y-3 p-3">
             {loading ? (
               <LoadingState label="Loading audit logs" compact />
             ) : currentAuditData.length ? (
@@ -499,10 +477,7 @@ export function LogsPage() {
                 />
               </>
             ) : (
-              <EmptyState
-                title="No audit logs found"
-                description="Try widening the time range or removing a filter."
-              />
+              <EmptyState title="No audit logs" />
             )}
           </CardContent>
         </Card>

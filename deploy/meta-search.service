@@ -8,7 +8,7 @@ Type=simple
 User=meta-search
 Group=meta-search
 WorkingDirectory=/opt/meta-search
-ExecStart=/usr/bin/node /opt/meta-search/apps/server/dist/index.js
+ExecStart=/opt/meta-search/meta-search
 Restart=on-failure
 RestartSec=5
 
@@ -22,7 +22,7 @@ Environment=HOST=127.0.0.1
 # Security hardening
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=/opt/meta-search/data
+ReadWritePaths=/opt/meta-search/config.jsonc /opt/meta-search/data
 ProtectHome=true
 PrivateTmp=true
 

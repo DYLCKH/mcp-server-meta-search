@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -126,9 +125,8 @@ export function PatsPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        badge="Access tokens"
-        title="PAT 暴露面与过期风险控制"
-        description="统一处理 token 创建、启停、删除和即将过期的清理队列。"
+        badge="PATs"
+        title="Tokens"
         actions={
           <>
             <Button
@@ -141,11 +139,11 @@ export function PatsPage() {
               disabled={!patQuery && patScope === "all"}
             >
               <Filter className="h-4 w-4" />
-              Reset filters
+              Reset
             </Button>
             <Button size="sm" onClick={() => setCreateOpen(true)}>
               <Plus className="h-4 w-4" />
-              Create PAT
+              Create
             </Button>
           </>
         }
@@ -169,21 +167,13 @@ export function PatsPage() {
 
       {createdToken ? (
         <Card className="border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/60">
-          <CardHeader className="gap-3 border-b border-emerald-200/70 dark:border-emerald-900/70">
-            <Badge variant="success" className="w-fit">
-              Copy now
-            </Badge>
-            <div className="space-y-1">
-              <CardTitle>PAT created successfully</CardTitle>
-              <CardDescription>
-                完整 token 只会展示这一次，建议立刻复制并分发到目标客户端。
-              </CardDescription>
+          <CardContent className="flex flex-col gap-3 p-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <Badge variant="success">Copy now</Badge>
+              <code className="overflow-x-auto rounded-md border bg-background px-3 py-2 font-mono text-sm">
+                {createdToken}
+              </code>
             </div>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
-            <code className="overflow-x-auto rounded-md border bg-background px-3 py-2 font-mono text-sm">
-              {createdToken}
-            </code>
             <Button
               variant="outline"
               size="sm"
@@ -196,7 +186,7 @@ export function PatsPage() {
               }}
             >
               <Copy className="h-4 w-4" />
-              Copy token
+              Copy
             </Button>
           </CardContent>
         </Card>
@@ -208,22 +198,17 @@ export function PatsPage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
         <Card>
-          <CardHeader className="gap-4 border-b bg-muted/20 md:flex-row md:items-start md:justify-between">
-            <div className="space-y-1.5">
-              <Badge variant="secondary" className="w-fit">
-                Registry
-              </Badge>
-              <CardTitle>Token registry</CardTitle>
-              <CardDescription>
-                通过检索和状态过滤快速缩小待处理范围，不再在长列表里人工扫描。
-              </CardDescription>
+          <CardHeader className="gap-2 border-b bg-muted/20 p-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary">Registry</Badge>
+              <CardTitle className="text-sm">Tokens</CardTitle>
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="outline">{filteredPats.length} visible</Badge>
               <Badge variant="outline">{expiringPats.length} expiring</Badge>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4 p-4">
+          <CardContent className="space-y-3 p-3">
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
               <Input
                 value={patQuery}
@@ -257,17 +242,7 @@ export function PatsPage() {
               <LoadingState label="Loading tokens" compact />
             ) : pats.length ? (
               filteredPats.length ? (
-                <div className="space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium">Working set</p>
-                      <p className="text-sm text-muted-foreground">
-                        主表保留创建、揭示、启停和删除操作，减少页面跳转。
-                      </p>
-                    </div>
-                    <Badge variant="outline">{filteredPats.length} rows</Badge>
-                  </div>
-                  <Table>
+                <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Name</TableHead>
@@ -284,9 +259,11 @@ export function PatsPage() {
                         <TableRow key={pat.name}>
                           <TableCell>
                             <div className="font-medium">{pat.name}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {pat.note || "No note provided"}
-                            </div>
+                            {pat.note ? (
+                              <div className="text-sm text-muted-foreground">
+                                {pat.note}
+                              </div>
+                            ) : null}
                           </TableCell>
                           <TableCell className="font-mono text-sm">
                             {pat.prefix || "-"}
@@ -346,79 +323,42 @@ export function PatsPage() {
                       ))}
                     </TableBody>
                   </Table>
-                </div>
               ) : (
-                <EmptyState
-                  title="No PATs match"
-                  description="Clear or widen the filters to bring tokens back into view."
-                />
+                <EmptyState title="No matches" />
               )
             ) : (
-              <EmptyState
-                title="No PATs created yet"
-                description="Create one to authenticate clients against the admin surface."
-              />
+              <EmptyState title="No PATs" />
             )}
           </CardContent>
         </Card>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           <Card>
-            <CardHeader className="gap-3 border-b bg-muted/20">
-              <Badge variant="secondary" className="w-fit">
-                Rotation radar
-              </Badge>
-              <div className="space-y-1">
-                <CardTitle>Risky tokens</CardTitle>
-                <CardDescription>
-                  把近期到期令牌单独提取出来，减少在主表中滚动查找。
-                </CardDescription>
+            <CardHeader className="gap-2 border-b bg-muted/20 p-3">
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">Expiring</Badge>
+                <CardTitle className="text-sm">Rotate soon</CardTitle>
               </div>
             </CardHeader>
-            <CardContent className="space-y-3 p-4">
+            <CardContent className="space-y-2 p-3">
               {expiringPats.length ? (
                 expiringPats.slice(0, 4).map((pat) => (
                   <div
                     key={pat.name}
-                    className="flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 dark:border-amber-900 dark:bg-amber-950/60"
+                    className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-900 dark:bg-amber-950/60"
                   >
-                    <div>
-                      <p className="font-medium">{pat.name}</p>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Expires {formatDate(pat.expiresAt)}
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-sm">{pat.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(pat.expiresAt)}
                       </p>
                     </div>
                     <Badge variant="warning">Rotate</Badge>
                   </div>
                 ))
               ) : (
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 dark:border-emerald-900 dark:bg-emerald-950/60">
-                  <p className="font-medium">No tokens expiring soon</p>
-                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                    The current registry does not show any token expiring within 7 days.
-                  </p>
-                </div>
+                <p className="text-sm text-muted-foreground">None within 7d</p>
               )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="gap-3 border-b bg-muted/20">
-              <Badge variant="secondary" className="w-fit">
-                Handling notes
-              </Badge>
-              <CardTitle>Safer token operations</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 p-4 text-sm leading-6 text-muted-foreground">
-              <div className="rounded-md border bg-muted/30 px-3 py-2">
-                Full tokens are only shown once, right after creation. Treat that reveal event as a handoff point, not as a recoverable view.
-              </div>
-              <div className="rounded-md border bg-muted/30 px-3 py-2">
-                Disable a token before deleting it if you need a controlled rollout or want to observe whether any client still depends on it.
-              </div>
-              <div className="rounded-md border bg-muted/30 px-3 py-2">
-                Keep notes specific. Good notes turn a token list into an ownership map.
-              </div>
             </CardContent>
           </Card>
         </div>

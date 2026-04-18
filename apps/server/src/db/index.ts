@@ -1,5 +1,4 @@
-import BetterSqlite3 from "better-sqlite3";
-import type { Database as DatabaseType } from "better-sqlite3";
+import { Database } from "bun:sqlite";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -63,7 +62,7 @@ const FLUSH_THRESHOLD = 50;
 
 // ── Module State ───────────────────────────────────────────────────────────
 
-let db: DatabaseType | null = null;
+let db: Database | null = null;
 let writeQueue: QueuedWrite[] = [];
 let flushTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -100,24 +99,24 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON admin_audit_logs(action);
 
 // ── Prepared Statements (lazy) ─────────────────────────────────────────────
 
-let stmtInsertRequest: BetterSqlite3.Statement | null = null;
-let stmtInsertAudit: BetterSqlite3.Statement | null = null;
+let stmtInsertRequest: ReturnType<Database["prepare"]> | null = null;
+let stmtInsertAudit: ReturnType<Database["prepare"]> | null = null;
 
-function getInsertRequestStmt(): BetterSqlite3.Statement {
+function getInsertRequestStmt() {
   if (!stmtInsertRequest) {
     stmtInsertRequest = db!.prepare(`
       INSERT INTO mcp_request_logs (tool, provider, pat_name, status, latency_ms, error, attempts)
-      VALUES (@tool, @provider, @pat_name, @status, @latency_ms, @error, @attempts)
+      VALUES ($tool, $provider, $pat_name, $status, $latency_ms, $error, $attempts)
     `);
   }
   return stmtInsertRequest;
 }
 
-function getInsertAuditStmt(): BetterSqlite3.Statement {
+function getInsertAuditStmt() {
   if (!stmtInsertAudit) {
     stmtInsertAudit = db!.prepare(`
       INSERT INTO admin_audit_logs (action, actor, target_type, target_id, details)
-      VALUES (@action, @actor, @target_type, @target_id, @details)
+      VALUES ($action, $actor, $target_type, $target_id, $details)
     `);
   }
   return stmtInsertAudit;
@@ -134,22 +133,22 @@ function flushQueue(): void {
       if (item.table === "mcp_request_logs") {
         const e = item.entry;
         getInsertRequestStmt().run({
-          tool: e.tool,
-          provider: e.provider ?? null,
-          pat_name: e.pat_name ?? null,
-          status: e.status,
-          latency_ms: e.latency_ms ?? null,
-          error: e.error ?? null,
-          attempts: e.attempts ?? 1,
+          $tool: e.tool,
+          $provider: e.provider ?? null,
+          $pat_name: e.pat_name ?? null,
+          $status: e.status,
+          $latency_ms: e.latency_ms ?? null,
+          $error: e.error ?? null,
+          $attempts: e.attempts ?? 1,
         });
       } else {
         const e = item.entry;
         getInsertAuditStmt().run({
-          action: e.action,
-          actor: e.actor ?? "admin",
-          target_type: e.target_type ?? null,
-          target_id: e.target_id ?? null,
-          details: e.details ?? null,
+          $action: e.action,
+          $actor: e.actor ?? "admin",
+          $target_type: e.target_type ?? null,
+          $target_id: e.target_id ?? null,
+          $details: e.details ?? null,
         });
       }
     }
@@ -159,12 +158,12 @@ function flushQueue(): void {
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
-export function initDatabase(dbPath: string): DatabaseType {
+export function initDatabase(dbPath: string): Database {
   if (db) throw new Error("Database already initialized");
 
-  db = new BetterSqlite3(dbPath) as DatabaseType;
+  db = new Database(dbPath, { create: true });
 
-  db.pragma("journal_mode = WAL");
+  db.exec("PRAGMA journal_mode = WAL");
   db.exec(SCHEMA_SQL);
 
   flushTimer = setInterval(flushQueue, FLUSH_INTERVAL_MS);
@@ -211,24 +210,24 @@ export function queryRequestLogs(filters: RequestLogFilters = {}): McpRequestLog
   const params: Record<string, unknown> = {};
 
   if (filters.tool) {
-    clauses.push("tool = @tool");
-    params.tool = filters.tool;
+    clauses.push("tool = $tool");
+    params.$tool = filters.tool;
   }
   if (filters.provider) {
-    clauses.push("provider = @provider");
-    params.provider = filters.provider;
+    clauses.push("provider = $provider");
+    params.$provider = filters.provider;
   }
   if (filters.status) {
-    clauses.push("status = @status");
-    params.status = filters.status;
+    clauses.push("status = $status");
+    params.$status = filters.status;
   }
   if (filters.from) {
-    clauses.push("timestamp >= @from");
-    params.from = filters.from;
+    clauses.push("timestamp >= $from");
+    params.$from = filters.from;
   }
   if (filters.to) {
-    clauses.push("timestamp <= @to");
-    params.to = filters.to;
+    clauses.push("timestamp <= $to");
+    params.$to = filters.to;
   }
 
   const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
@@ -236,9 +235,9 @@ export function queryRequestLogs(filters: RequestLogFilters = {}): McpRequestLog
   const offset = filters.offset ?? 0;
 
   const stmt = db.prepare(
-    `SELECT * FROM mcp_request_logs ${where} ORDER BY timestamp DESC LIMIT @limit OFFSET @offset`,
+    `SELECT * FROM mcp_request_logs ${where} ORDER BY timestamp DESC LIMIT $limit OFFSET $offset`,
   );
-  return stmt.all({ ...params, limit, offset }) as McpRequestLogEntry[];
+  return stmt.all({ ...params, $limit: limit, $offset: offset }) as McpRequestLogEntry[];
 }
 
 export function queryAuditLogs(filters: AuditLogFilters = {}): AuditLogEntry[] {
@@ -248,20 +247,20 @@ export function queryAuditLogs(filters: AuditLogFilters = {}): AuditLogEntry[] {
   const params: Record<string, unknown> = {};
 
   if (filters.action) {
-    clauses.push("action = @action");
-    params.action = filters.action;
+    clauses.push("action = $action");
+    params.$action = filters.action;
   }
   if (filters.target_type) {
-    clauses.push("target_type = @target_type");
-    params.target_type = filters.target_type;
+    clauses.push("target_type = $target_type");
+    params.$target_type = filters.target_type;
   }
   if (filters.from) {
-    clauses.push("timestamp >= @from");
-    params.from = filters.from;
+    clauses.push("timestamp >= $from");
+    params.$from = filters.from;
   }
   if (filters.to) {
-    clauses.push("timestamp <= @to");
-    params.to = filters.to;
+    clauses.push("timestamp <= $to");
+    params.$to = filters.to;
   }
 
   const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
@@ -269,9 +268,9 @@ export function queryAuditLogs(filters: AuditLogFilters = {}): AuditLogEntry[] {
   const offset = filters.offset ?? 0;
 
   const stmt = db.prepare(
-    `SELECT * FROM admin_audit_logs ${where} ORDER BY timestamp DESC LIMIT @limit OFFSET @offset`,
+    `SELECT * FROM admin_audit_logs ${where} ORDER BY timestamp DESC LIMIT $limit OFFSET $offset`,
   );
-  return stmt.all({ ...params, limit, offset }) as AuditLogEntry[];
+  return stmt.all({ ...params, $limit: limit, $offset: offset }) as AuditLogEntry[];
 }
 
 export function getRequestStats(from?: string, to?: string): RequestStats {
@@ -281,12 +280,12 @@ export function getRequestStats(from?: string, to?: string): RequestStats {
   const params: Record<string, unknown> = {};
 
   if (from) {
-    clauses.push("timestamp >= @from");
-    params.from = from;
+    clauses.push("timestamp >= $from");
+    params.$from = from;
   }
   if (to) {
-    clauses.push("timestamp <= @to");
-    params.to = to;
+    clauses.push("timestamp <= $to");
+    params.$to = to;
   }
 
   const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";

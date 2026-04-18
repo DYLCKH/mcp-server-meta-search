@@ -18,7 +18,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -98,37 +97,37 @@ export function DashboardPage() {
   const actionQueue = [
     attentionProviders.length
       ? {
-          title: "Restore provider capacity",
-          description: `${summarizeNames(
+          title: "No active keys",
+          description: summarizeNames(
             attentionProviders.map((provider) => provider.name),
-          )} currently have no active keys.`,
+          ),
           link: "/providers",
-          label: "Open providers",
+          label: "Open",
           tone: "warning" as const,
         }
       : null,
     degradedProviders.length
       ? {
-          title: "Review degraded credentials",
-          description: `${disabledKeys} disabled and ${revokedKeys} revoked keys are reducing usable capacity.`,
+          title: "Degraded keys",
+          description: `${disabledKeys} disabled · ${revokedKeys} revoked`,
           link: "/providers",
-          label: "Inspect keys",
+          label: "Inspect",
           tone: "error" as const,
         }
       : null,
     data.patCount === 0
       ? {
-          title: "Create the first client token",
-          description: "Downstream clients still do not have PAT-based access.",
+          title: "No PATs",
+          description: "",
           link: "/pats",
-          label: "Create PAT",
+          label: "Create",
           tone: "warning" as const,
         }
       : {
-          title: "Review PAT exposure",
-          description: `${data.patCount} PATs are active in the current environment.`,
+          title: "PATs",
+          description: `${data.patCount} active`,
           link: "/pats",
-          label: "Open PAT registry",
+          label: "Open",
           tone: "success" as const,
         },
   ].filter(
@@ -146,16 +145,15 @@ export function DashboardPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        badge="Operations overview"
-        title="搜索基础设施运行总览"
-        description="先确认容量、暴露面和风险点，再进入具体工作区执行操作。"
+        badge="Overview"
+        title="Operations"
         actions={
           <>
-            <Button asChild>
-              <Link to="/providers">Manage providers</Link>
+            <Button asChild size="sm">
+              <Link to="/providers">Providers</Link>
             </Button>
-            <Button asChild variant="outline">
-              <Link to="/logs">Inspect logs</Link>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/logs">Logs</Link>
             </Button>
           </>
         }
@@ -163,15 +161,15 @@ export function DashboardPage() {
           <SummaryStats
             items={[
               {
-                label: "Configured providers",
+                label: "Providers",
                 value: `${configuredProviders}/${totalProviders}`,
               },
               {
-                label: "Attention pools",
+                label: "Attention",
                 value: String(attentionProviders.length),
               },
               {
-                label: "PAT inventory",
+                label: "PATs",
                 value: String(data.patCount),
               },
             ]}
@@ -182,27 +180,27 @@ export function DashboardPage() {
       <MetricGrid
         items={[
           {
-            label: "Provider fleet",
+            label: "Providers",
             value: `${configuredProviders}/${totalProviders}`,
-            meta: `${healthyProviders} healthy pools in service.`,
-            badge: "Providers",
+            meta: `${healthyProviders} healthy`,
+            badge: "Pools",
           },
           {
-            label: "Active capacity",
+            label: "Active keys",
             value: String(activeKeys),
-            meta: `${totalKeys} total keys across all providers.`,
+            meta: `${totalKeys} total`,
             badge: "Keys",
           },
           {
-            label: "Keys needing action",
+            label: "Attention keys",
             value: String(disabledKeys + revokedKeys),
-            meta: `${disabledKeys} disabled, ${revokedKeys} revoked.`,
+            meta: `${disabledKeys} disabled · ${revokedKeys} revoked`,
             badge: "Risk",
           },
           {
-            label: "PAT inventory",
+            label: "PATs",
             value: String(data.patCount),
-            meta: "Keep the client token surface intentionally small.",
+            meta: "active",
             badge: "Access",
           },
         ]}
@@ -210,16 +208,11 @@ export function DashboardPage() {
 
       <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
         <Card>
-          <CardHeader className="gap-4 border-b bg-muted/20">
-            <div className="flex items-center justify-between gap-3">
-              <div className="space-y-1.5">
-                <Badge variant="secondary" className="w-fit">
-                  Action queue
-                </Badge>
-                <CardTitle>What needs attention now</CardTitle>
-                <CardDescription>
-                  首屏只保留当前最值得处理的动作，避免信息分散在多个装饰区块里。
-                </CardDescription>
+          <CardHeader className="gap-2 border-b bg-muted/20 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">Queue</Badge>
+                <CardTitle className="text-sm">Attention</CardTitle>
               </div>
               <Badge
                 variant={
@@ -228,7 +221,7 @@ export function DashboardPage() {
                     : "success"
                 }
               >
-                {actionQueue.length} items
+                {actionQueue.length}
               </Badge>
             </div>
           </CardHeader>
@@ -236,16 +229,16 @@ export function DashboardPage() {
             {actionQueue.map((item) => (
               <div
                 key={item.title}
-                className="border-b px-4 py-4 last:border-b-0"
+                className="border-b px-3 py-3 last:border-b-0"
               >
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-2.5">
                   <div
                     className={
                       item.tone === "success"
-                        ? "rounded-md border border-emerald-200 bg-emerald-50 p-2 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/70 dark:text-emerald-300"
+                        ? "rounded border border-emerald-200 bg-emerald-50 p-1.5 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/70 dark:text-emerald-300"
                         : item.tone === "warning"
-                          ? "rounded-md border border-amber-200 bg-amber-50 p-2 text-amber-700 dark:border-amber-900 dark:bg-amber-950/70 dark:text-amber-300"
-                          : "rounded-md border border-rose-200 bg-rose-50 p-2 text-rose-700 dark:border-rose-900 dark:bg-rose-950/70 dark:text-rose-300"
+                          ? "rounded border border-amber-200 bg-amber-50 p-1.5 text-amber-700 dark:border-amber-900 dark:bg-amber-950/70 dark:text-amber-300"
+                          : "rounded border border-rose-200 bg-rose-50 p-1.5 text-rose-700 dark:border-rose-900 dark:bg-rose-950/70 dark:text-rose-300"
                     }
                   >
                     {item.tone === "success" ? (
@@ -257,32 +250,17 @@ export function DashboardPage() {
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-medium">{item.title}</p>
-                      <Badge
-                        variant={
-                          item.tone === "success"
-                            ? "success"
-                            : item.tone === "warning"
-                              ? "warning"
-                              : "destructive"
-                        }
-                      >
-                        {item.tone === "success"
-                          ? "Stable"
-                          : item.tone === "warning"
-                            ? "Attention"
-                            : "Risk"}
-                      </Badge>
-                    </div>
-                    <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                      {item.description}
-                    </p>
+                    <p className="font-medium text-sm">{item.title}</p>
+                    {item.description ? (
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {item.description}
+                      </p>
+                    ) : null}
                     <Button
                       asChild
                       variant="ghost"
                       size="sm"
-                      className="mt-2 h-auto px-0 text-primary hover:bg-transparent"
+                      className="mt-1 h-auto px-0 text-primary hover:bg-transparent"
                     >
                       <Link to={item.link}>
                         {item.label}
@@ -297,20 +275,15 @@ export function DashboardPage() {
         </Card>
 
         <Card>
-          <CardHeader className="gap-4 border-b bg-muted/20 md:flex-row md:items-start md:justify-between">
-            <div className="space-y-1.5">
-              <Badge variant="secondary" className="w-fit">
-                Provider matrix
-              </Badge>
-              <CardTitle>Where capacity is concentrated</CardTitle>
-              <CardDescription>
-                按 provider 汇总可用容量，先看总量，再判断哪个池已经失去流量承接能力。
-              </CardDescription>
+          <CardHeader className="gap-2 border-b bg-muted/20 p-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary">Providers</Badge>
+              <CardTitle className="text-sm">Capacity</CardTitle>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="outline">{providers.length} providers</Badge>
+              <Badge variant="outline">{providers.length}</Badge>
               <Button asChild variant="outline" size="sm">
-                <Link to="/providers">Open provider console</Link>
+                <Link to="/providers">Open</Link>
               </Button>
             </div>
           </CardHeader>
@@ -368,10 +341,7 @@ export function DashboardPage() {
               </Table>
             ) : (
               <div className="p-4">
-                <EmptyState
-                  title="No providers available"
-                  description="Add provider keys to start routing requests through the admin console."
-                />
+                <EmptyState title="No providers" />
               </div>
             )}
           </CardContent>

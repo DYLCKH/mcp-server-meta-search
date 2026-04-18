@@ -5,7 +5,7 @@ import {
   getDisplayHost,
   getServerHost,
   getServerPort,
-  spawnPnpm,
+  spawnBun,
   writeDevState,
   clearDevState,
   waitForExit,
@@ -27,7 +27,7 @@ process.stdout.write(
 
 await writeDevState({ serverPort: port });
 
-const child = spawnPnpm(["--filter", "@meta-search/server", "dev"], {
+const child = spawnBun(["run", "--filter", "@meta-search/server", "dev"], {
   PORT: String(port),
   HOST: host,
 });

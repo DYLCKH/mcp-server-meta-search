@@ -9,7 +9,7 @@ The target outcome is:
 - a server-hosted MCP endpoint using Streamable HTTP
 - a single-tenant Admin WebUI for managing provider keys, PATs, and runtime settings
 - better runtime performance through in-memory snapshots, connection reuse, concurrency control, and async logging
-- operational simplicity for single-machine binary deployment or Docker deployment
+- operational simplicity for Bun-based single-machine deployment, especially a single binary release
 
 ## Goals
 
@@ -31,7 +31,7 @@ The target outcome is:
 
 ## Confirmed Product Decisions
 
-- Deployment shape: single-process application, packaged as either a single-machine binary or Docker image.
+- Deployment shape: single-process application, packaged as either a Bun-managed service or a single-machine binary.
 - MCP protocol: Streamable HTTP.
 - Client auth: PAT token.
 - Admin scope: single-tenant management console.
@@ -419,7 +419,7 @@ Testing is split into four layers.
 ### Operational Verification
 
 - binary deployment smoke test
-- Docker deployment smoke test
+- Bun-managed deployment smoke test
 - reverse-proxy and forwarded-header validation
 - backup and restore of `config.jsonc`
 
@@ -445,7 +445,7 @@ Testing is split into four layers.
 
 ### Phase 4: Deployment and Operations
 
-- add Docker packaging and single-machine deployment docs
+- add Bun deployment and single-machine deployment docs
 - add CDN or reverse-proxy deployment examples
 - add config import, export, and restore workflows
 

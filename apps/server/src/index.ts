@@ -1,12 +1,8 @@
 import process from "node:process";
-import { createServer } from "node:http";
-import type { Server, IncomingMessage, ServerResponse } from "node:http";
 import { dirname, extname, join, resolve } from "node:path";
-import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 import { Hono } from "hono";
-import { getRequestListener } from "@hono/node-server";
 
 import { resolveConfig } from "@meta-search/config";
 
@@ -32,6 +28,7 @@ import { createAdminRouter } from "./admin/router.js";
 import type { AdminDeps, DbHandle } from "./admin/types.js";
 import { resolveAppPath, resolveStaticAssetPath } from "./path-utils.js";
 import { buildRuntimeState } from "./runtime-state.js";
+import { embeddedAssets } from "./static-assets.js";
 
 // ---------------------------------------------------------------------------
 // Proxy Support
@@ -60,7 +57,9 @@ async function setupProxy(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 const SERVER_MODULE_DIR = dirname(fileURLToPath(import.meta.url));
-const WORKSPACE_ROOT = resolve(SERVER_MODULE_DIR, "..", "..", "..");
+const IS_COMPILED = !SERVER_MODULE_DIR.includes("apps/server");
+const WORKSPACE_ROOT = process.env.META_SEARCH_ROOT
+  ?? (IS_COMPILED ? process.cwd() : resolve(SERVER_MODULE_DIR, "..", "..", ".."));
 
 // ---------------------------------------------------------------------------
 // DB Handle Adapter
@@ -100,20 +99,23 @@ const MIME_TYPES: Record<string, string> = {
   ".ico": "image/x-icon",
 };
 
-async function serveStaticFile(
-  res: ServerResponse,
-  filePath: string,
-): Promise<boolean> {
-  try {
-    const data = await readFile(filePath);
-    const ext = extname(filePath).toLowerCase();
-    const contentType = MIME_TYPES[ext] ?? "application/octet-stream";
-    res.writeHead(200, { "Content-Type": contentType });
-    res.end(data);
-    return true;
-  } catch {
-    return false;
-  }
+function serveEmbeddedAsset(assetPath: string): Response | null {
+  if (!embeddedAssets) return null;
+  const asset = embeddedAssets[assetPath];
+  if (!asset) return null;
+  return new Response(asset.data, {
+    headers: { "Content-Type": asset.contentType },
+  });
+}
+
+async function serveStaticFile(filePath: string): Promise<Response | null> {
+  const file = Bun.file(filePath);
+  if (!(await file.exists())) return null;
+  const ext = extname(filePath).toLowerCase();
+  const contentType = MIME_TYPES[ext] ?? "application/octet-stream";
+  return new Response(file, {
+    headers: { "Content-Type": contentType },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -208,7 +210,10 @@ async function main(): Promise<void> {
   };
   const adminRouter = createAdminRouter(adminDeps);
 
-  // 10. Create Hono app
+  // 10. Determine WebUI static root
+  const webRoot = join(WORKSPACE_ROOT, "apps", "web", "dist");
+
+  // 11. Create Hono app with all routes
   const app = new Hono();
 
   app.get("/healthz", (c) => c.text("OK"));
@@ -229,114 +234,94 @@ async function main(): Promise<void> {
     return c.text(text, 200, { "Content-Type": "text/plain; version=0.0.4; charset=utf-8" });
   });
 
+  // MCP transport (web-standard Request/Response)
+  app.all("/mcp", async (c) => {
+    if (patSnapshotRef.current.hasPats) {
+      const authHeader = c.req.header("authorization");
+      if (!authHeader?.startsWith("Bearer ")) {
+        return c.json({ error: "Unauthorized" }, 401);
+      }
+      const token = authHeader.slice(7);
+      if (!validateBearerToken(token, patSnapshotRef.current)) {
+        return c.json({ error: "Unauthorized" }, 401);
+      }
+    }
+
+    try {
+      return await transport.handleRequest(c.req.raw);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`[meta-search] MCP transport error: ${msg}\n`);
+      return c.json({ error: "Internal server error" }, 500);
+    }
+  });
+
   // Mount admin API routes
   app.route("/api/admin", adminRouter);
 
-  // 11. Create the Hono request listener
-  const honoListener = getRequestListener(app.fetch);
+  // Static file serving for /app
+  const serveAppAssets = async (c: { req: { path: string } }) => {
+    const subPath = c.req.path.slice("/app".length) || "/";
 
-  // 12. Determine WebUI static root
-  const webRoot = join(WORKSPACE_ROOT, "apps", "web", "dist");
+    if (subPath !== "/" && extname(subPath)) {
+      const embedded = serveEmbeddedAsset(subPath);
+      if (embedded) return embedded;
 
-  // 13. Create a raw Node.js HTTP server that routes /mcp to the MCP
-  //     transport, /app/* to static files, and everything else to Hono
-  const server = createServer(
-    async (req: IncomingMessage, res: ServerResponse) => {
-      const url = req.url?.split("?")[0] ?? "/";
-
-      // Route MCP requests directly to the transport
-      if (url === "/mcp") {
-        // PAT auth check
-        if (patSnapshotRef.current.hasPats) {
-          const authHeader = req.headers.authorization;
-          if (!authHeader?.startsWith("Bearer ")) {
-            res.writeHead(401, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ error: "Unauthorized" }));
-            return;
-          }
-          const token = authHeader.slice(7);
-          if (!validateBearerToken(token, patSnapshotRef.current)) {
-            res.writeHead(401, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ error: "Unauthorized" }));
-            return;
-          }
-        }
-
-        try {
-          await transport.handleRequest(req, res);
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          process.stderr.write(`[meta-search] MCP transport error: ${msg}\n`);
-          if (!res.headersSent) {
-            res.writeHead(500, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ error: "Internal server error" }));
-          }
-        }
-        return;
+      const filePath = resolveStaticAssetPath(webRoot, subPath);
+      if (filePath) {
+        const response = await serveStaticFile(filePath);
+        if (response) return response;
       }
+      return new Response("Not found", {
+        status: 404,
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
+    }
 
-      // Serve static files for /app/*
-      if (url.startsWith("/app")) {
-        const subPath = url.slice("/app".length) || "/";
+    // SPA fallback: serve index.html
+    const embedded = serveEmbeddedAsset("/index.html");
+    if (embedded) return embedded;
 
-        if (subPath !== "/" && extname(subPath)) {
-          const filePath = resolveStaticAssetPath(webRoot, subPath);
-          if (!filePath) {
-            res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-            res.end("Not found");
-            return;
-          }
+    const indexPath = resolveStaticAssetPath(webRoot, "/index.html");
+    if (indexPath) {
+      const response = await serveStaticFile(indexPath);
+      if (response) return response;
+    }
+    return new Response("Admin UI assets are unavailable", {
+      status: 500,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
+  };
 
-          const served = await serveStaticFile(res, filePath);
-          if (served) {
-            return;
-          }
+  app.get("/app", serveAppAssets);
+  app.get("/app/*", serveAppAssets);
 
-          res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-          res.end("Not found");
-          return;
-        }
-
-        // SPA fallback: serve index.html
-        const indexPath = resolveStaticAssetPath(webRoot, "/index.html");
-        const served =
-          indexPath !== null
-            ? await serveStaticFile(res, indexPath)
-            : false;
-        if (!served) {
-          res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
-          res.end("Admin UI assets are unavailable");
-        }
-        return;
-      }
-
-      // Everything else goes to Hono
-      honoListener(req, res);
-    },
-  );
-
-  // 14. Start listening
+  // 12. Start listening
   const port = parseInt(process.env.PORT ?? "3000", 10);
   const hostname = process.env.HOST ?? "0.0.0.0";
 
-  server.listen(port, hostname, () => {
-    ready = true;
-    printStartupSummary(rt);
-    process.stderr.write(
-      `[meta-search] Admin: http://${hostname}:${port}/app\n`,
-    );
-    process.stderr.write(
-      `[meta-search] Listening on http://${hostname}:${port}\n`,
-    );
-    process.stderr.write("[meta-search] Ready.\n");
+  const server = Bun.serve({
+    port,
+    hostname,
+    fetch: app.fetch,
   });
 
-  // 15. Graceful shutdown
+  ready = true;
+  printStartupSummary(rt);
+  process.stderr.write(
+    `[meta-search] Admin: http://${hostname}:${port}/app\n`,
+  );
+  process.stderr.write(
+    `[meta-search] Listening on http://${hostname}:${port}\n`,
+  );
+  process.stderr.write("[meta-search] Ready.\n");
+
+  // 13. Graceful shutdown
   setupGracefulShutdown(server, mcpServer);
 }
 
 function setupGracefulShutdown(
-  server: Server,
+  server: { stop(closeActiveConnections?: boolean): void },
   mcpServer: McpServer,
 ): void {
   let shuttingDown = false;
@@ -347,7 +332,6 @@ function setupGracefulShutdown(
 
     process.stderr.write("[meta-search] Shutting down...\n");
 
-    // Close database
     try {
       closeDatabase();
     } catch (err) {
@@ -355,12 +339,9 @@ function setupGracefulShutdown(
       process.stderr.write(`[meta-search] Error closing database: ${msg}\n`);
     }
 
-    // Stop accepting new connections
-    server.close(() => {
-      process.stderr.write("[meta-search] HTTP server closed.\n");
-    });
+    server.stop();
+    process.stderr.write("[meta-search] HTTP server closed.\n");
 
-    // Close MCP server
     try {
       await mcpServer.close();
     } catch (err) {
