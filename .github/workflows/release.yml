@@ -2,6 +2,8 @@ name: Release Binaries
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
   workflow_dispatch:
@@ -124,3 +126,57 @@ jobs:
         with:
           files: release/*
           generate_release_notes: true
+
+  release-dev:
+    name: Rolling Dev Release
+    needs: build-binary
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    concurrency:
+      group: release-dev
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          merge-multiple: false
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          for dir in artifacts/meta-search-*; do
+            name=$(basename "$dir")
+            cp "$dir/$name" "release/$name"
+            chmod +x "release/$name"
+            cd release && sha256sum "$name" > "$name.sha256" && cd ..
+          done
+          ls -lh release/
+
+      - name: Compute release name
+        id: relname
+        run: |
+          RUN_PADDED=$(printf '%04d' ${{ github.run_number }})
+          DATE_STR=$(date -u +%Y%m%d)
+          echo "name=dev-${RUN_PADDED}-${DATE_STR}" >> "$GITHUB_OUTPUT"
+
+      - name: Remove previous dev release and tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete dev --yes --cleanup-tag || true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: dev
+          name: ${{ steps.relname.outputs.name }}
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          make_latest: "false"
+          files: release/*
+          body: |
+            Rolling pre-release built from `main` (${{ github.sha }}).
+
+            - Build: `${{ steps.relname.outputs.name }}`
+            - Commit: ${{ github.sha }}
+            - Run: ${{ github.run_number }}
