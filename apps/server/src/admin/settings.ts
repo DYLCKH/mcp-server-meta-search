@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { writeConfigAtomic, loadConfig, AppConfigSchema } from "@meta-search/config";
+import { mutateConfig } from "@meta-search/config";
 import type { AdminDeps } from "./types.js";
 import { applyResolvedConfig } from "../runtime-state.js";
 
@@ -43,29 +43,24 @@ export function createSettingsRoutes(deps: AdminDeps): Hono {
       return c.json({ error: "Invalid payload", details: parsed.error.issues }, 400);
     }
 
-    const config = loadConfig(deps.configPath);
+    await mutateConfig(deps.configPath, (config) => {
+      if (parsed.data.key_rotation_strategy !== undefined) {
+        config.key_rotation_strategy = parsed.data.key_rotation_strategy;
+      }
+      if (parsed.data.max_attempts_per_request !== undefined) {
+        config.max_attempts_per_request = parsed.data.max_attempts_per_request;
+      }
+      if (parsed.data.request_timeout_ms !== undefined) {
+        config.request_timeout_ms = parsed.data.request_timeout_ms;
+      }
+      if (parsed.data.key_recovery_interval_ms !== undefined) {
+        config.key_recovery_interval_ms = parsed.data.key_recovery_interval_ms;
+      }
+      if (parsed.data.max_disable_before_revoke !== undefined) {
+        config.max_disable_before_revoke = parsed.data.max_disable_before_revoke;
+      }
+    });
 
-    // Apply updates to config
-    if (parsed.data.key_rotation_strategy !== undefined) {
-      config.key_rotation_strategy = parsed.data.key_rotation_strategy;
-    }
-    if (parsed.data.max_attempts_per_request !== undefined) {
-      config.max_attempts_per_request = parsed.data.max_attempts_per_request;
-    }
-    if (parsed.data.request_timeout_ms !== undefined) {
-      config.request_timeout_ms = parsed.data.request_timeout_ms;
-    }
-    if (parsed.data.key_recovery_interval_ms !== undefined) {
-      config.key_recovery_interval_ms = parsed.data.key_recovery_interval_ms;
-    }
-    if (parsed.data.max_disable_before_revoke !== undefined) {
-      config.max_disable_before_revoke = parsed.data.max_disable_before_revoke;
-    }
-
-    // Re-validate the full config
-    const validated = AppConfigSchema.parse(config);
-
-    writeConfigAtomic(deps.configPath, validated);
     const appliedConfig = applyResolvedConfig(deps);
 
     deps.db.insertAuditLog({

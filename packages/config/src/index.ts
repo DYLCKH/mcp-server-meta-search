@@ -2,7 +2,9 @@ import {
   copyFileSync,
   existsSync,
   readFileSync,
+  readdirSync,
   renameSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join, dirname } from "node:path";
@@ -24,8 +26,10 @@ export function parseJsonc(text: string): unknown {
     let inString = false;
     for (let i = 0; i < line.length; i++) {
       const ch = line[i];
-      if (ch === '"' && (i === 0 || line[i - 1] !== "\\")) {
-        inString = !inString;
+      if (ch === '"') {
+        let backslashes = 0;
+        for (let j = i - 1; j >= 0 && line[j] === "\\"; j--) backslashes++;
+        if (backslashes % 2 === 0) inString = !inString;
       } else if (!inString && ch === "/" && line[i + 1] === "/") {
         return line.slice(0, i);
       }
@@ -68,7 +72,13 @@ const PatRecordSchema = z.object({
 
 const AdminAuthSchema = z.object({
   password_hash: z.string().optional(),
-  session_secret: z.string().optional(),
+  session_secret: z
+    .string()
+    .refine(
+      (v) => v === undefined || v.length >= 32,
+      "admin.session_secret must be at least 32 characters",
+    )
+    .optional(),
   session_ttl_ms: z.number().optional(),
 });
 
@@ -204,11 +214,38 @@ export function loadConfig(configPath: string): AppConfig {
 // Atomic Config Write
 // ---------------------------------------------------------------------------
 
+const MAX_BACKUPS = 10;
+const BACKUP_PREFIX = "config.";
+const BACKUP_SUFFIX = ".bak";
+
+function pruneOldBackups(dir: string): void {
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return;
+  }
+
+  const backups = entries
+    .filter((n) => n.startsWith(BACKUP_PREFIX) && n.endsWith(BACKUP_SUFFIX))
+    .sort();
+
+  const toDelete = backups.slice(0, Math.max(0, backups.length - MAX_BACKUPS));
+  for (const name of toDelete) {
+    try {
+      unlinkSync(join(dir, name));
+    } catch {
+      // best-effort cleanup; ignore
+    }
+  }
+}
+
 /**
  * Write config to a file atomically:
  * 1. Write to a temp file in the same directory
  * 2. Create a timestamped backup of the existing file (if present)
  * 3. Rename temp file over the target
+ * 4. Prune older backups beyond MAX_BACKUPS
  */
 export function writeConfigAtomic(configPath: string, config: unknown): void {
   const json = JSON.stringify(config, null, 2);
@@ -217,7 +254,7 @@ export function writeConfigAtomic(configPath: string, config: unknown): void {
   // Create backup if existing file is present
   if (existsSync(configPath)) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const backupPath = join(dir, `config.${timestamp}.bak`);
+    const backupPath = join(dir, `${BACKUP_PREFIX}${timestamp}${BACKUP_SUFFIX}`);
     copyFileSync(configPath, backupPath);
   }
 
@@ -225,6 +262,35 @@ export function writeConfigAtomic(configPath: string, config: unknown): void {
   const tmpPath = join(dir, `.config.tmp-${randomUUID()}`);
   writeFileSync(tmpPath, json, "utf-8");
   renameSync(tmpPath, configPath);
+
+  pruneOldBackups(dir);
+}
+
+// ---------------------------------------------------------------------------
+// Mutation Mutex
+// ---------------------------------------------------------------------------
+
+/**
+ * Serialize config load-mutate-write cycles to avoid lost-update races between
+ * concurrent admin requests. Each mutator receives a freshly-loaded config;
+ * the returned config is validated and atomically persisted.
+ */
+let mutationChain: Promise<unknown> = Promise.resolve();
+
+export async function mutateConfig<T>(
+  configPath: string,
+  mutator: (config: AppConfig) => T | Promise<T>,
+): Promise<T> {
+  const next = mutationChain.then(async () => {
+    const config = loadConfig(configPath);
+    const result = await mutator(config);
+    writeConfigAtomic(configPath, AppConfigSchema.parse(config));
+    return result;
+  });
+  // Swallow rejections on the chain so one failed mutation doesn't break the
+  // next caller. Each caller still sees its own error via the returned promise.
+  mutationChain = next.catch(() => undefined);
+  return next;
 }
 
 // ---------------------------------------------------------------------------

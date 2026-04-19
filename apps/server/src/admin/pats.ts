@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { writeConfigAtomic, loadConfig, AppConfigSchema } from "@meta-search/config";
+import { mutateConfig, loadConfig } from "@meta-search/config";
 import { generatePat } from "@meta-search/runtime";
 import type { AdminDeps } from "./types.js";
 import { applyResolvedConfig } from "../runtime-state.js";
@@ -22,6 +22,23 @@ const UpdatePatSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function mergeLastUsedAt(
+  deps: AdminDeps,
+  patName: string,
+  configValue: string | null | undefined,
+): string | null {
+  const snapshotEntry = deps.patSnapshot.current.byName.get(patName);
+  const runtimeMs = snapshotEntry?.lastUsedAt ?? null;
+  if (runtimeMs != null) {
+    return new Date(runtimeMs).toISOString();
+  }
+  return configValue ?? null;
+}
+
+// ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
 
@@ -41,6 +58,7 @@ export function createPatRoutes(deps: AdminDeps): Hono {
         note: p.note ?? null,
         expires_at: p.expires_at ?? null,
         created_at: p.created_at ?? null,
+        last_used_at: mergeLastUsedAt(deps, p.name, p.last_used_at),
       })),
     });
   });
@@ -54,30 +72,33 @@ export function createPatRoutes(deps: AdminDeps): Hono {
     }
 
     const { name, note, expires_at } = parsed.data;
-    const config = loadConfig(deps.configPath);
-
-    if (!config.pats) config.pats = [];
-
-    // Check for duplicate name
-    if (config.pats.some((p) => p.name === name)) {
-      return c.json({ error: `PAT with name "${name}" already exists` }, 409);
-    }
-
     const { token, prefix, hash } = generatePat();
 
-    config.pats.push({
-      name,
-      prefix,
-      hash,
-      encrypted: false,
-      disabled: false,
-      note: note ?? null,
-      expires_at: expires_at ?? null,
-      created_at: new Date().toISOString(),
-      last_used_at: null,
-    });
+    try {
+      await mutateConfig(deps.configPath, (config) => {
+        if (!config.pats) config.pats = [];
+        if (config.pats.some((p) => p.name === name)) {
+          throw new PatAlreadyExistsError(name);
+        }
+        config.pats.push({
+          name,
+          prefix,
+          hash,
+          encrypted: false,
+          disabled: false,
+          note: note ?? null,
+          expires_at: expires_at ?? null,
+          created_at: new Date().toISOString(),
+          last_used_at: null,
+        });
+      });
+    } catch (err) {
+      if (err instanceof PatAlreadyExistsError) {
+        return c.json({ error: `PAT with name "${name}" already exists` }, 409);
+      }
+      throw err;
+    }
 
-    writeConfigAtomic(deps.configPath, AppConfigSchema.parse(config));
     applyResolvedConfig(deps);
 
     deps.db.insertAuditLog({
@@ -107,7 +128,7 @@ export function createPatRoutes(deps: AdminDeps): Hono {
       note: pat.note ?? null,
       expires_at: pat.expires_at ?? null,
       created_at: pat.created_at ?? null,
-      last_used_at: pat.last_used_at ?? null,
+      last_used_at: mergeLastUsedAt(deps, pat.name, pat.last_used_at),
     });
   });
 
@@ -140,18 +161,22 @@ export function createPatRoutes(deps: AdminDeps): Hono {
       return c.json({ error: "Invalid payload", details: parsed.error.issues }, 400);
     }
 
-    const config = loadConfig(deps.configPath);
-    const pat = config.pats?.find((p) => p.name === name);
+    let notFound = false;
+    await mutateConfig(deps.configPath, (config) => {
+      const pat = config.pats?.find((p) => p.name === name);
+      if (!pat) {
+        notFound = true;
+        return;
+      }
+      if (parsed.data.disabled !== undefined) pat.disabled = parsed.data.disabled;
+      if (parsed.data.note !== undefined) pat.note = parsed.data.note;
+      if (parsed.data.expires_at !== undefined) pat.expires_at = parsed.data.expires_at;
+    });
 
-    if (!pat) {
+    if (notFound) {
       return c.json({ error: `PAT "${name}" not found` }, 404);
     }
 
-    if (parsed.data.disabled !== undefined) pat.disabled = parsed.data.disabled;
-    if (parsed.data.note !== undefined) pat.note = parsed.data.note;
-    if (parsed.data.expires_at !== undefined) pat.expires_at = parsed.data.expires_at;
-
-    writeConfigAtomic(deps.configPath, AppConfigSchema.parse(config));
     applyResolvedConfig(deps);
 
     deps.db.insertAuditLog({
@@ -165,25 +190,30 @@ export function createPatRoutes(deps: AdminDeps): Hono {
   });
 
   // DELETE /:name - delete PAT
-  app.delete("/:name", (c) => {
+  app.delete("/:name", async (c) => {
     const name = c.req.param("name");
-    const config = loadConfig(deps.configPath);
+    let notFound = false;
 
-    if (!config.pats) {
+    await mutateConfig(deps.configPath, (config) => {
+      if (!config.pats) {
+        notFound = true;
+        return;
+      }
+      const index = config.pats.findIndex((p) => p.name === name);
+      if (index === -1) {
+        notFound = true;
+        return;
+      }
+      config.pats.splice(index, 1);
+      if (config.pats.length === 0) {
+        delete config.pats;
+      }
+    });
+
+    if (notFound) {
       return c.json({ error: `PAT "${name}" not found` }, 404);
     }
 
-    const index = config.pats.findIndex((p) => p.name === name);
-    if (index === -1) {
-      return c.json({ error: `PAT "${name}" not found` }, 404);
-    }
-
-    config.pats.splice(index, 1);
-    if (config.pats.length === 0) {
-      delete config.pats;
-    }
-
-    writeConfigAtomic(deps.configPath, AppConfigSchema.parse(config));
     applyResolvedConfig(deps);
 
     deps.db.insertAuditLog({
@@ -197,4 +227,11 @@ export function createPatRoutes(deps: AdminDeps): Hono {
   });
 
   return app;
+}
+
+class PatAlreadyExistsError extends Error {
+  constructor(name: string) {
+    super(`PAT with name "${name}" already exists`);
+    this.name = "PatAlreadyExistsError";
+  }
 }

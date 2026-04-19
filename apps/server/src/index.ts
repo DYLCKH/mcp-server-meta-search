@@ -10,15 +10,20 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { buildPatSnapshot, validateBearerToken } from "./middleware/pat-auth.js";
 import type { PatSnapshot } from "./middleware/pat-auth.js";
-import { createMcpServer, createTransport } from "./mcp/transport.js";
+import {
+  createMcpServer,
+  createTransport,
+  mcpCallContext,
+  setMcpLogger,
+} from "./mcp/transport.js";
 import type { RuntimeState } from "./mcp/transport.js";
 import {
   initDatabase,
   closeDatabase,
   logAuditEvent,
+  logMcpRequest,
   queryRequestLogs,
   queryAuditLogs,
-  getRequestStats,
 } from "./db/index.js";
 import type {
   RequestLogFilters as DbRequestLogFilters,
@@ -60,6 +65,9 @@ const SERVER_MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 const IS_COMPILED = !SERVER_MODULE_DIR.includes("apps/server");
 const WORKSPACE_ROOT = process.env.META_SEARCH_ROOT
   ?? (IS_COMPILED ? process.cwd() : resolve(SERVER_MODULE_DIR, "..", "..", ".."));
+
+// Cap MCP POST bodies to avoid OOM under malicious or runaway clients.
+const MCP_MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MiB
 
 // ---------------------------------------------------------------------------
 // DB Handle Adapter
@@ -187,6 +195,7 @@ async function main(): Promise<void> {
     WORKSPACE_ROOT,
   );
   initDatabase(dbPath);
+  setMcpLogger(logMcpRequest);
   const dbHandle = createDbHandle();
 
   // 6. Create mutable refs for runtime snapshots
@@ -236,19 +245,33 @@ async function main(): Promise<void> {
 
   // MCP transport (web-standard Request/Response)
   app.all("/mcp", async (c) => {
+    // Body size guard — reject oversized requests before touching transport.
+    const contentLengthHeader = c.req.header("content-length");
+    if (contentLengthHeader) {
+      const contentLength = Number.parseInt(contentLengthHeader, 10);
+      if (Number.isFinite(contentLength) && contentLength > MCP_MAX_BODY_BYTES) {
+        return c.json({ error: "Payload too large" }, 413);
+      }
+    }
+
+    let patName: string | null = null;
     if (patSnapshotRef.current.hasPats) {
       const authHeader = c.req.header("authorization");
       if (!authHeader?.startsWith("Bearer ")) {
         return c.json({ error: "Unauthorized" }, 401);
       }
       const token = authHeader.slice(7);
-      if (!validateBearerToken(token, patSnapshotRef.current)) {
+      const result = validateBearerToken(token, patSnapshotRef.current);
+      if (!result.valid) {
         return c.json({ error: "Unauthorized" }, 401);
       }
+      patName = result.patName;
     }
 
     try {
-      return await transport.handleRequest(c.req.raw);
+      return await mcpCallContext.run({ patName }, () =>
+        transport.handleRequest(c.req.raw),
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       process.stderr.write(`[meta-search] MCP transport error: ${msg}\n`);

@@ -1,4 +1,6 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { maskKey, HttpProviderError } from "@meta-search/shared";
 
 interface RevokedKeyEntry {
@@ -18,6 +20,16 @@ function loadInvalidKeys(filePath: string): RevokedKeyEntry[] {
   } catch {
     return [];
   }
+}
+
+function writeInvalidKeysAtomic(
+  filePath: string,
+  entries: RevokedKeyEntry[],
+): void {
+  const dir = dirname(filePath);
+  const tmpPath = join(dir, `.invalid-keys.tmp-${randomUUID()}`);
+  writeFileSync(tmpPath, JSON.stringify(entries, null, 2), "utf-8");
+  renameSync(tmpPath, filePath);
 }
 
 export function createKeyRevokedHandler(invalidKeysFilePath: string) {
@@ -43,11 +55,7 @@ export function createKeyRevokedHandler(invalidKeysFilePath: string) {
 
     revokedKeys.push(entry);
     try {
-      writeFileSync(
-        invalidKeysFilePath,
-        JSON.stringify(revokedKeys, null, 2),
-        "utf-8",
-      );
+      writeInvalidKeysAtomic(invalidKeysFilePath, revokedKeys);
     } catch (writeErr) {
       const msg =
         writeErr instanceof Error ? writeErr.message : String(writeErr);

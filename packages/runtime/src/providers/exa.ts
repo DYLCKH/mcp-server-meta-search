@@ -104,7 +104,6 @@ export function createExaHandler(deps: ExaHandlerDeps) {
           headers: {
             "Content-Type": "application/json",
             "x-api-key": apiKey as string,
-            Authorization: `Bearer ${apiKey}`,
           },
           body: JSON.stringify(payload),
         },

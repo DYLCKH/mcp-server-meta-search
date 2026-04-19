@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { z } from "zod";
@@ -19,6 +21,31 @@ import {
   optionalHttpUrlSchema,
 } from "@meta-search/shared";
 import type { ResolvedConfig } from "@meta-search/config";
+
+// ---------------------------------------------------------------------------
+// MCP request logger injection
+// ---------------------------------------------------------------------------
+
+export interface McpRequestLogEntry {
+  tool: string;
+  provider: string | null;
+  pat_name: string | null;
+  status: "success" | "error";
+  latency_ms: number;
+  error?: string;
+  attempts?: number;
+}
+
+type McpLogger = (entry: McpRequestLogEntry) => void;
+
+// The logger is injected by the host app (apps/server/src/index.ts) so that
+// transport.ts doesn't depend on `bun:sqlite` at module load — keeps this file
+// importable from test environments that run on Node.
+let mcpLogger: McpLogger = () => {};
+
+export function setMcpLogger(fn: McpLogger): void {
+  mcpLogger = fn;
+}
 
 export interface RuntimeState {
   config: ResolvedConfig;
@@ -42,6 +69,72 @@ export interface RuntimeStateRefLike {
 
 function normalizeResults(results: unknown): unknown[] {
   return Array.isArray(results) ? results : [];
+}
+
+// ---------------------------------------------------------------------------
+// MCP request logging
+// ---------------------------------------------------------------------------
+
+const TOOL_PROVIDER_MAP: Record<string, string> = {
+  search_tavily: "tavily",
+  search_exa: "exa",
+  search_perplexity: "perplexity",
+  fetch_jina_markdown: "jina",
+  fetch_as_markdown: "cloudflare",
+};
+
+interface McpCallContext {
+  patName: string | null;
+}
+
+export const mcpCallContext = new AsyncLocalStorage<McpCallContext>();
+
+type ToolHandler<TInput, TResult> = (input: TInput) => Promise<TResult>;
+
+function withRequestLogging<TInput, TResult extends { structuredContent?: unknown }>(
+  toolName: string,
+  handler: ToolHandler<TInput, TResult>,
+): ToolHandler<TInput, TResult> {
+  return async (input: TInput) => {
+    const start = Date.now();
+    const provider = TOOL_PROVIDER_MAP[toolName] ?? null;
+    const ctx = mcpCallContext.getStore();
+    try {
+      const result = await handler(input);
+      const structured = result.structuredContent as
+        | { attempts?: unknown }
+        | undefined;
+      const attempts =
+        typeof structured?.attempts === "number" ? structured.attempts : 1;
+      mcpLogger({
+        tool: toolName,
+        provider,
+        pat_name: ctx?.patName ?? null,
+        status: "success",
+        latency_ms: Date.now() - start,
+        attempts,
+      });
+      return result;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      mcpLogger({
+        tool: toolName,
+        provider,
+        pat_name: ctx?.patName ?? null,
+        status: "error",
+        latency_ms: Date.now() - start,
+        error: msg.slice(0, 500),
+      });
+      throw err;
+    }
+  };
+}
+
+function hashPayload(value: unknown): string {
+  return createHash("sha256")
+    .update(JSON.stringify(value))
+    .digest("hex")
+    .slice(0, 16);
 }
 
 function makePerf(rt: RuntimeState, provider: string): PerfMiddleware | undefined {
@@ -185,7 +278,7 @@ function registerTools(server: McpServer, runtimeStateRef: RuntimeStateRefLike):
       },
       annotations: { readOnlyHint: true },
     },
-    createTavilyToolHandler(runtimeStateRef),
+    withRequestLogging("search_tavily", createTavilyToolHandler(runtimeStateRef)),
   );
 
   // --- search_exa ---
@@ -215,7 +308,7 @@ function registerTools(server: McpServer, runtimeStateRef: RuntimeStateRefLike):
       },
       annotations: { readOnlyHint: true },
     },
-    async (input) => {
+    withRequestLogging("search_exa", async (input) => {
       const { rt, config, requestTimeoutMs, maxAttemptsPerRequest } =
         getRuntimeRequestConfig(runtimeStateRef);
       const includeText = input.include_text !== false;
@@ -264,7 +357,7 @@ function registerTools(server: McpServer, runtimeStateRef: RuntimeStateRefLike):
           url: `${exaBaseUrl}/search`,
           init: {
             method: "POST",
-            headers: { "Content-Type": "application/json", "x-api-key": apiKey as string, Authorization: `Bearer ${apiKey as string}` },
+            headers: { "Content-Type": "application/json", "x-api-key": apiKey as string },
             body: JSON.stringify(payload),
           },
         }),
@@ -285,7 +378,7 @@ function registerTools(server: McpServer, runtimeStateRef: RuntimeStateRefLike):
         content: [{ type: "text", text: stringifyForToolContent(normalized) }],
         structuredContent: normalized,
       };
-    },
+    }),
   );
 
   // --- search_perplexity ---
@@ -303,7 +396,7 @@ function registerTools(server: McpServer, runtimeStateRef: RuntimeStateRefLike):
       },
       annotations: { readOnlyHint: true },
     },
-    async (input) => {
+    withRequestLogging("search_perplexity", async (input) => {
       const { rt, config, requestTimeoutMs, maxAttemptsPerRequest } =
         getRuntimeRequestConfig(runtimeStateRef);
       const perplexityBaseUrl = normalizeBaseUrl(
@@ -348,7 +441,7 @@ function registerTools(server: McpServer, runtimeStateRef: RuntimeStateRefLike):
         content: [{ type: "text", text: stringifyForToolContent(normalized) }],
         structuredContent: normalized,
       };
-    },
+    }),
   );
 
   // --- fetch_jina_markdown ---
@@ -366,7 +459,7 @@ function registerTools(server: McpServer, runtimeStateRef: RuntimeStateRefLike):
       },
       annotations: { readOnlyHint: true },
     },
-    async (input) => {
+    withRequestLogging("fetch_jina_markdown", async (input) => {
       const { rt, config, requestTimeoutMs, maxAttemptsPerRequest } =
         getRuntimeRequestConfig(runtimeStateRef);
       const jinaBaseUrl = normalizeBaseUrl(
@@ -432,7 +525,7 @@ function registerTools(server: McpServer, runtimeStateRef: RuntimeStateRefLike):
         content: [{ type: "text", text: markdown }],
         structuredContent: normalized,
       };
-    },
+    }),
   );
 
   // --- fetch_as_markdown ---
@@ -495,7 +588,7 @@ function registerTools(server: McpServer, runtimeStateRef: RuntimeStateRefLike):
       }),
       annotations: { readOnlyHint: true },
     },
-    async (input) => {
+    withRequestLogging("fetch_as_markdown", async (input) => {
       const { rt, config, requestTimeoutMs, maxAttemptsPerRequest } =
         getRuntimeRequestConfig(runtimeStateRef);
       const cfBaseUrl = normalizeBaseUrl(
@@ -535,7 +628,12 @@ function registerTools(server: McpServer, runtimeStateRef: RuntimeStateRefLike):
         configuredMaxAttempts: maxAttemptsPerRequest,
         onKeyRevoked: rt.onKeyRevoked,
         perf: makePerf(rt, "cloudflare"),
-        cacheKey: `cloudflare:fetch:${input.url ?? ""}:${input.html ? "html" : ""}`,
+        cacheKey: `cloudflare:fetch:${hashPayload({
+          url: input.url ?? null,
+          html: input.html ? true : false,
+          payload,
+          queryParams,
+        })}`,
         buildRequest: (cred) => {
           const c = cred as { accountId: string; token: string };
           return {
@@ -569,7 +667,7 @@ function registerTools(server: McpServer, runtimeStateRef: RuntimeStateRefLike):
         content: [{ type: "text", text: markdown || stringifyForToolContent(normalized) }],
         structuredContent: normalized,
       };
-    },
+    }),
   );
 }
 

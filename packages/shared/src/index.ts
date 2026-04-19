@@ -89,7 +89,7 @@ export interface KeySelection<T = unknown> {
 export const DEFAULT_TIMEOUT_MS = 30000;
 
 export const RETRYABLE_HTTP_STATUS = new Set<number>([
-  401, 402, 403, 408, 409, 425, 429, 432, 433, 500, 502, 503, 504,
+  401, 402, 403, 408, 429, 500, 502, 503, 504,
 ]);
 
 export const AUTH_ERROR_STATUSES = new Set<number>([401, 402, 403]);
@@ -154,8 +154,12 @@ export function parseJsonc(text: string): unknown {
     let inString = false;
     for (let i = 0; i < line.length; i++) {
       const ch = line[i];
-      if (ch === '"' && (i === 0 || line[i - 1] !== "\\")) {
-        inString = !inString;
+      if (ch === '"') {
+        // Count consecutive backslashes immediately before this quote.
+        // An even count means the quote is not escaped.
+        let backslashes = 0;
+        for (let j = i - 1; j >= 0 && line[j] === "\\"; j--) backslashes++;
+        if (backslashes % 2 === 0) inString = !inString;
       } else if (!inString && ch === "/" && line[i + 1] === "/") {
         return line.slice(0, i);
       }

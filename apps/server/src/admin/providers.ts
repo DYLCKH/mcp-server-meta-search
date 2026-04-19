@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { writeConfigAtomic, loadConfig, AppConfigSchema } from "@meta-search/config";
+import { mutateConfig } from "@meta-search/config";
 import type { AppConfig, CloudflareAccount } from "@meta-search/config";
 import { maskKey } from "@meta-search/shared";
 import type { AdminDeps, ProviderName } from "./types.js";
@@ -87,11 +87,6 @@ function isCloudflare(name: ProviderName): boolean {
   return name === "cloudflare";
 }
 
-function writeConfigAndReload(deps: AdminDeps, config: AppConfig) {
-  writeConfigAtomic(deps.configPath, AppConfigSchema.parse(config));
-  applyResolvedConfig(deps);
-}
-
 // ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
@@ -155,31 +150,39 @@ export function createProviderRoutes(deps: AdminDeps): Hono {
     }
 
     const body = await c.req.json();
+    let parseIssues: unknown = null;
 
-    const config = loadConfig(deps.configPath);
-    const prov = ensureProviderConfig(config, name);
+    await mutateConfig(deps.configPath, (config) => {
+      const prov = ensureProviderConfig(config, name);
 
-    if (isCloudflare(name)) {
-      const parsed = AddCloudflareKeySchema.safeParse(body);
-      if (!parsed.success) {
-        return c.json({ error: "Invalid payload", details: parsed.error.issues }, 400);
+      if (isCloudflare(name)) {
+        const parsed = AddCloudflareKeySchema.safeParse(body);
+        if (!parsed.success) {
+          parseIssues = parsed.error.issues;
+          return;
+        }
+        const { account_id, api_token } = parsed.data.api_key;
+        const cf = prov as { accounts?: CloudflareAccount[] };
+        if (!cf.accounts) cf.accounts = [];
+        cf.accounts.push({ account_id, api_token });
+      } else {
+        const parsed = AddKeySchema.safeParse(body);
+        if (!parsed.success) {
+          parseIssues = parsed.error.issues;
+          return;
+        }
+        if (!(prov as { api_keys?: string[] }).api_keys) {
+          (prov as { api_keys?: string[] }).api_keys = [];
+        }
+        (prov as { api_keys?: string[] }).api_keys!.push(parsed.data.api_key);
       }
-      const { account_id, api_token } = parsed.data.api_key;
-      const cf = prov as { accounts?: CloudflareAccount[] };
-      if (!cf.accounts) cf.accounts = [];
-      cf.accounts.push({ account_id, api_token });
-    } else {
-      const parsed = AddKeySchema.safeParse(body);
-      if (!parsed.success) {
-        return c.json({ error: "Invalid payload", details: parsed.error.issues }, 400);
-      }
-      if (!(prov as { api_keys?: string[] }).api_keys) {
-        (prov as { api_keys?: string[] }).api_keys = [];
-      }
-      (prov as { api_keys?: string[] }).api_keys!.push(parsed.data.api_key);
+    });
+
+    if (parseIssues) {
+      return c.json({ error: "Invalid payload", details: parseIssues }, 400);
     }
 
-    writeConfigAndReload(deps, config);
+    applyResolvedConfig(deps);
     deps.db.insertAuditLog({
       action: "add_key",
       target_type: "provider",
@@ -238,21 +241,28 @@ export function createProviderRoutes(deps: AdminDeps): Hono {
       return c.json({ error: `Unknown provider: ${name}` }, 400);
     }
 
-    const config = loadConfig(deps.configPath);
-    const keys = getKeysFromConfig(config, name);
-    if (index < 0 || index >= keys.length) {
+    let outOfRange = false;
+    await mutateConfig(deps.configPath, (config) => {
+      const keys = getKeysFromConfig(config, name);
+      if (index < 0 || index >= keys.length) {
+        outOfRange = true;
+        return;
+      }
+
+      if (isCloudflare(name)) {
+        const cf = config.cloudflare!;
+        cf.accounts?.splice(index, 1);
+      } else {
+        const prov = getProviderConfig(config, name) as { api_keys?: string[] };
+        prov.api_keys?.splice(index, 1);
+      }
+    });
+
+    if (outOfRange) {
       return c.json({ error: "Key index out of range" }, 400);
     }
 
-    if (isCloudflare(name)) {
-      const cf = config.cloudflare!;
-      cf.accounts?.splice(index, 1);
-    } else {
-      const prov = getProviderConfig(config, name) as { api_keys?: string[] };
-      prov.api_keys?.splice(index, 1);
-    }
-
-    writeConfigAndReload(deps, config);
+    applyResolvedConfig(deps);
     deps.db.insertAuditLog({
       action: "delete_key",
       target_type: "provider",

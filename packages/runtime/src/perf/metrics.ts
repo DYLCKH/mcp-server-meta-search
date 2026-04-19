@@ -14,6 +14,8 @@ export interface ProviderStats {
 interface LatencyBucket {
   latencies: number[];
   maxSize: number;
+  /** Write cursor; once >= maxSize we overwrite in place (ring buffer). */
+  cursor: number;
 }
 
 interface ProviderMetrics {
@@ -53,12 +55,14 @@ export class MetricsCollector {
       metrics.maxLatencyMs = latencyMs;
     }
 
-    // Store latency sample (ring buffer style)
+    // Store latency sample (ring buffer, O(1) overwrite once full)
     const bucket = metrics.latency;
-    if (bucket.latencies.length >= bucket.maxSize) {
-      bucket.latencies.shift();
+    if (bucket.latencies.length < bucket.maxSize) {
+      bucket.latencies.push(latencyMs);
+    } else {
+      bucket.latencies[bucket.cursor] = latencyMs;
     }
-    bucket.latencies.push(latencyMs);
+    bucket.cursor = (bucket.cursor + 1) % bucket.maxSize;
 
     metrics.lastRequestAt = Date.now();
   }
@@ -147,7 +151,7 @@ export class MetricsCollector {
     if (!metrics) {
       metrics = {
         requests: new Map(),
-        latency: { latencies: [], maxSize: MAX_LATENCY_SAMPLES },
+        latency: { latencies: [], maxSize: MAX_LATENCY_SAMPLES, cursor: 0 },
         totalLatencyMs: 0,
         minLatencyMs: 0,
         maxLatencyMs: 0,

@@ -249,12 +249,12 @@ async function callWithPerfInner(
   const { perf, cacheKey, ...rotationOpts } = opts;
   if (!perf) return callWithKeyRotation(rotationOpts);
 
-  // 3. Single-flight dedup
-  const sfKey = cacheKey ?? `${providerName}:${Date.now()}:${Math.random()}`;
   const exec = () => callWithPerfCore(opts, providerName, tool, start);
 
-  if (perf.singleFlight) {
-    return perf.singleFlight.dedup(sfKey, exec);
+  // Single-flight only engages when a cacheKey is provided — without a
+  // deterministic key, deduplication would be impossible anyway.
+  if (perf.singleFlight && cacheKey) {
+    return perf.singleFlight.dedup(cacheKey, exec);
   }
 
   return exec();
@@ -326,17 +326,21 @@ function isRetryableError(error: unknown): boolean {
 }
 
 function extractProviderErrorBody(rawText: string, json: unknown): string {
+  const MAX_BODY_LEN = 500;
+  const truncate = (s: string): string =>
+    s.length > MAX_BODY_LEN ? `${s.slice(0, MAX_BODY_LEN)}…[truncated]` : s;
+
   if (json && typeof json === "object") {
     const obj = json as Record<string, unknown>;
-    if (typeof obj.error === "string") return obj.error;
+    if (typeof obj.error === "string") return truncate(obj.error);
     if (obj.detail && typeof (obj.detail as Record<string, unknown>).error === "string") {
-      return (obj.detail as Record<string, unknown>).error as string;
+      return truncate((obj.detail as Record<string, unknown>).error as string);
     }
-    return JSON.stringify(json, null, 2);
+    return truncate(JSON.stringify(json));
   }
 
   if (typeof rawText === "string" && rawText.trim()) {
-    return rawText.trim();
+    return truncate(rawText.trim());
   }
 
   return "No error payload returned by provider";
