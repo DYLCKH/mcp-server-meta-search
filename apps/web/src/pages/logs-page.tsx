@@ -307,7 +307,7 @@ export function LogsPage() {
                       onChange={(event) =>
                         setAuditDraft({ ...auditDraft, target: event.target.value })
                       }
-                      placeholder="e.g. provider"
+                      placeholder="e.g. global or tavily"
                     />
                   }
                 />

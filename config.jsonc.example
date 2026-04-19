@@ -76,9 +76,15 @@
 
   // Admin panel credentials & session settings.
   "admin": {
-    // SHA-256 hash of the admin password.
-    // Generate: node -e "console.log(require('crypto').createHash('sha256').update('your-password').digest('hex'))"
-    "password_hash": "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8",
+    // Set a plaintext password here on first launch. On startup the server
+    // hashes it with argon2id, writes the result to admin.password_hash, and
+    // removes this field from the file — so the plaintext is never stored
+    // long-term. Change the password anytime by setting this field again.
+    "password": "change-me-on-first-launch",
+
+    // Argon2id-encoded password hash. Populated automatically after the
+    // plaintext above is hashed on first launch. Do not edit by hand.
+    // "password_hash": "$argon2id$v=19$m=65536,t=2,p=1$...",
 
     // Secret used to sign session cookies. Must be at least 32 characters.
     // Generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"

@@ -12,7 +12,7 @@ export const TOOL_DEFINITION = {
   inputSchema: {
     query: z.string().min(1).describe("The search query to execute with Perplexity."),
     max_results: optionalIntSchema(z.number().int().min(1).max(20)).describe("The maximum number of search results to return (1-20, default 10)."),
-    max_tokens_per_page: optionalIntSchema(z.number().int().min(256).max(2048)).describe("Maximum tokens of content to return per result page (256-2048, default 1024)."),
+    max_tokens_per_page: optionalIntSchema(z.number().int().min(1).max(1_000_000)).describe("Maximum tokens of content to return per result page (1-1000000, default 4096)."),
     country: z.string().length(2).optional().describe("ISO 3166-1 alpha-2 country code to bias search results, e.g. US, CN, GB."),
   },
   annotations: {
@@ -37,7 +37,7 @@ export function createPerplexityHandler(deps: PerplexityHandlerDeps) {
     const payload = compactObject({
       query: input.query,
       max_results: input.max_results ?? 10,
-      max_tokens_per_page: input.max_tokens_per_page ?? 1024,
+      max_tokens_per_page: input.max_tokens_per_page ?? 4096,
       country: input.country,
     });
 

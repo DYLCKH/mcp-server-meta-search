@@ -109,7 +109,8 @@ The server uses **JSONC** (`config.jsonc`) as its primary configuration format. 
 | `key_recovery_interval_ms` | `300000` | Time before disabled key retries (5 min) |
 | `max_disable_before_revoke` | `3` | Failures before permanent revocation |
 | `invalid_keys_file` | `invalid-keys.json` | File path for revoked keys |
-| `admin.password_hash` | — | SHA-256 hash of admin password |
+| `admin.password` | — | Plaintext password (transient). Hashed to `password_hash` on startup, then removed from the file. |
+| `admin.password_hash` | — | Argon2id-encoded password hash. Written automatically; legacy SHA-256 hex still accepted and auto-upgraded on next login. |
 | `admin.session_secret` | — | Secret for signing session cookies |
 | `admin.session_ttl_ms` | `86400000` | Session TTL (24 hours) |
 | `pats` | `[]` | Personal access tokens array |
@@ -140,9 +141,15 @@ Manage PATs through the Admin API or WebUI.
 
 ### Admin Panel (Session)
 
-The admin panel uses cookie-based session authentication. Set
-`admin.password_hash` and `admin.session_secret` in `config.jsonc` to enable
-login.
+The admin panel uses signed cookie-based session authentication.
+
+**Setting the admin password**:
+
+1. Edit `config.jsonc` and set `admin.password` to a plaintext password, plus a random `admin.session_secret` (≥32 chars).
+2. Start the server. On boot it hashes the password with **argon2id**, writes the result to `admin.password_hash`, and removes the plaintext `password` field from the file.
+3. Repeat any time you need to rotate: set `admin.password` again and restart.
+
+Passwords are never stored in plaintext after the first launch. Legacy SHA-256 hashes from older versions are still accepted for login and will be transparently upgraded to argon2id on the next successful login.
 
 ## MCP Tools
 
@@ -213,7 +220,7 @@ All `/api/admin/*` routes (except login/logout) require an authenticated admin s
 | `PUT` | `/api/admin/settings` | Update settings (triggers hot reload) |
 | `POST` | `/api/admin/reload` | Reload config from disk and apply |
 | `GET` | `/api/admin/logs/requests` | MCP request logs (query: tool, provider, status, from, to, limit, offset) |
-| `GET` | `/api/admin/logs/audit` | Audit logs (query: action, target_type, from, to, limit, offset) |
+| `GET` | `/api/admin/logs/audit` | Audit logs (query: action, target, target_type, from, to, limit, offset) |
 
 ### WebUI
 

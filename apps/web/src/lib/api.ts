@@ -429,15 +429,8 @@ export const api = {
   },
 
   async getAuditLogs(params: Record<string, unknown>) {
-    const query = { ...params };
-
-    if (Object.prototype.hasOwnProperty.call(query, "target")) {
-      query.target_type = query.target;
-      delete query.target;
-    }
-
     const data = await request<PaginatedResponse<Record<string, unknown>>>(
-      `/logs/audit${buildQueryString(query)}`,
+      `/logs/audit${buildQueryString(params)}`,
     );
 
     return {

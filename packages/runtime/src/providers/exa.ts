@@ -16,13 +16,15 @@ export const TOOL_DEFINITION = {
   inputSchema: {
     query: z.string().min(1).describe("The query string for the search"),
     num_results: optionalIntSchema(z.number().int().min(1).max(100)).describe("Number of results to return (1-100, default 10)"),
-    type: z.enum(["neural", "fast", "auto", "deep", "instant"]).optional().describe("Search type: neural (embeddings-based), auto (default, intelligently combines methods), fast (streamlined models), deep (light deep search), instant (lowest latency for real-time apps)"),
+    type: z
+      .enum(["neural", "fast", "auto", "deep-lite", "deep", "deep-reasoning", "instant"])
+      .optional()
+      .describe("Search type: neural, auto, fast, deep-lite, deep, deep-reasoning, or instant."),
     category: z
       .enum([
         "company",
         "research paper",
         "news",
-        "tweet",
         "personal site",
         "financial report",
         "people",

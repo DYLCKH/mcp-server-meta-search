@@ -50,7 +50,7 @@ export const TOOL_DEFINITION = {
           .describe("CSS selector to wait for before extraction."),
         visible: optionalBoolSchema().describe("Wait until element is visible."),
         hidden: optionalBoolSchema().describe("Wait until element is hidden."),
-        timeout: optionalIntSchema(z.number().int().min(0).max(60000))
+        timeout: optionalIntSchema(z.number().int().min(0).max(120000))
           .describe("Max wait time for selector in ms."),
       })
       .optional()

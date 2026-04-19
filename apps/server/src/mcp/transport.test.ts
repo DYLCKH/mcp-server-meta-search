@@ -122,4 +122,32 @@ describe("createTavilyToolHandler", () => {
       query: "latest",
     });
   });
+
+  it("preserves Tavily response_time when upstream returns a string", async () => {
+    const runtimeStateRef: RuntimeStateRefLike = {
+      current: createRuntimeState("https://tavily.example", "test-key"),
+    };
+    const handler = createTavilyToolHandler(runtimeStateRef);
+
+    vi.stubGlobal("fetch", async () => ({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          query: "latency",
+          response_time: "1.67",
+          results: [],
+        }),
+    }));
+
+    const result = await handler({
+      query: "latency",
+    });
+
+    expect(result.structuredContent).toMatchObject({
+      provider: "tavily",
+      query: "latency",
+      response_time: "1.67",
+    });
+  });
 });

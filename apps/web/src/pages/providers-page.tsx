@@ -71,6 +71,26 @@ export function ProvidersPage() {
     }
   }
 
+  async function loadProviderDetail(name: string) {
+    setDetailLoading(true);
+    setDetailError("");
+
+    try {
+      const response = await api.getProvider(name);
+      setDetail(response);
+      setDetailError("");
+    } catch (requestError) {
+      setDetail(null);
+      setDetailError(extractErrorMessage(requestError));
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  async function refreshSelectedProvider(name: string) {
+    await Promise.all([loadProviders(), loadProviderDetail(name)]);
+  }
+
   useEffect(() => {
     void loadProviders();
   }, []);
@@ -160,7 +180,7 @@ export function ProvidersPage() {
     try {
       await api.updateKey(selected, index, { enabled: !key.enabled });
       toast.success(`${selected} key updated`);
-      await loadProviders();
+      await refreshSelectedProvider(selected);
     } catch (requestError) {
       toast.error(extractErrorMessage(requestError));
     }
@@ -178,7 +198,7 @@ export function ProvidersPage() {
     try {
       await api.deleteKey(selected, index);
       toast.success(`Deleted key from ${selected}`);
-      await loadProviders();
+      await refreshSelectedProvider(selected);
     } catch (requestError) {
       toast.error(extractErrorMessage(requestError));
     }
@@ -461,7 +481,12 @@ export function ProvidersPage() {
         provider={selectedSummary?.name ?? ""}
         onOpenChange={setAddKeyOpen}
         onAdded={async () => {
-          await loadProviders();
+          if (!selectedSummary) {
+            await loadProviders();
+            return;
+          }
+
+          await refreshSelectedProvider(selectedSummary.name);
         }}
       />
     </div>

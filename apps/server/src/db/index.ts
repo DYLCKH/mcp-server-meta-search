@@ -36,6 +36,7 @@ export interface RequestLogFilters {
 
 export interface AuditLogFilters {
   action?: string;
+  target?: string;
   target_type?: string;
   from?: string;
   to?: string;
@@ -249,6 +250,10 @@ export function queryAuditLogs(filters: AuditLogFilters = {}): AuditLogEntry[] {
   if (filters.action) {
     clauses.push("action = $action");
     params.$action = filters.action;
+  }
+  if (filters.target) {
+    clauses.push("COALESCE(target_id, target_type) = $target");
+    params.$target = filters.target;
   }
   if (filters.target_type) {
     clauses.push("target_type = $target_type");

@@ -57,6 +57,12 @@ function normalizeResults(results: unknown): unknown[] {
   return Array.isArray(results) ? results : [];
 }
 
+function normalizeResponseTime(responseTime: unknown): string | number | null {
+  return typeof responseTime === "string" || typeof responseTime === "number"
+    ? responseTime
+    : null;
+}
+
 export function createTavilyHandler(deps: TavilyHandlerDeps) {
   return async function searchTavily(input: Record<string, unknown>) {
     const payload = compactObject({
@@ -102,7 +108,7 @@ export function createTavilyHandler(deps: TavilyHandlerDeps) {
       request_id: typeof response.request_id === "string" ? response.request_id : null,
       query: typeof response.query === "string" ? response.query : input.query,
       answer: typeof response.answer === "string" ? response.answer : null,
-      response_time: typeof response.response_time === "number" ? response.response_time : null,
+      response_time: normalizeResponseTime(response.response_time),
       usage: response.usage && typeof response.usage === "object" ? response.usage : null,
       images: normalizeResults(response.images),
       results: normalizeResults(response.results),

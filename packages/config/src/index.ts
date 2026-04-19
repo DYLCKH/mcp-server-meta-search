@@ -71,6 +71,10 @@ const PatRecordSchema = z.object({
 });
 
 const AdminAuthSchema = z.object({
+  // Transient plaintext password. When present at startup the server hashes it
+  // with argon2id, writes the result to `password_hash`, and removes this
+  // field. Never stored long-term.
+  password: z.string().optional(),
   password_hash: z.string().optional(),
   session_secret: z
     .string()

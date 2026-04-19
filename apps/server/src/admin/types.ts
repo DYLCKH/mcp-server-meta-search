@@ -37,6 +37,7 @@ export interface RequestLogEntry {
 
 export interface AuditLogFilters {
   action?: string;
+  target?: string;
   target_type?: string;
   from?: string;
   to?: string;

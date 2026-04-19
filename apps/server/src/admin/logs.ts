@@ -37,6 +37,7 @@ export function createLogRoutes(deps: AdminDeps): Hono {
   app.get("/audit", (c) => {
     const filters = {
       action: c.req.query("action"),
+      target: c.req.query("target"),
       target_type: c.req.query("target_type"),
       from: c.req.query("from"),
       to: c.req.query("to"),

@@ -31,6 +31,7 @@ import type {
 } from "./db/index.js";
 import { createAdminRouter } from "./admin/router.js";
 import type { AdminDeps, DbHandle } from "./admin/types.js";
+import { bootstrapAdminPassword } from "./admin/bootstrap.js";
 import { resolveAppPath, resolveStaticAssetPath } from "./path-utils.js";
 import { buildRuntimeState } from "./runtime-state.js";
 import { embeddedAssets } from "./static-assets.js";
@@ -181,6 +182,11 @@ async function main(): Promise<void> {
     WORKSPACE_ROOT,
   );
   const configDir = dirname(configPath);
+
+  // 2a. Hash any plaintext admin.password in config and persist back to disk
+  //     before we resolve the config into runtime state.
+  await bootstrapAdminPassword(configPath);
+
   const config = resolveConfig(configPath);
 
   // 3. Build runtime state
