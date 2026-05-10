@@ -84,8 +84,9 @@ jobs:
       - run: bun run --filter @meta-search/config build
       - run: bun run --filter @meta-search/runtime build
 
-      # Generate embedded assets
+      # Generate embedded assets and config example
       - run: bun ./scripts/embed-assets.mjs
+      - run: bun ./scripts/embed-config-example.mjs
 
       # Compile binary
       - run: |

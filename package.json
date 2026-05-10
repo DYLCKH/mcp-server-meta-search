@@ -7,7 +7,7 @@
   },
   "scripts": {
     "build": "bun ./scripts/build-workspace.mjs",
-    "test": "vitest run",
+    "test": "bun ./scripts/embed-config-example.mjs && vitest run",
     "dev": "bun ./scripts/dev.mjs",
     "dev:server": "bun ./scripts/dev-server.mjs",
     "dev:web": "bun ./scripts/dev-web.mjs",

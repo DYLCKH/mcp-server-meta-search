@@ -1,30 +1,27 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
+import { CONFIG_EXAMPLE as BUNDLED_CONFIG_EXAMPLE } from "./config-example.generated.js";
+
 export interface ConfigBootstrapOptions {
   workspaceRoot: string;
   exampleText?: string;
   preferBundledExample?: boolean;
 }
 
-async function loadGeneratedConfigExample(): Promise<string | null> {
-  try {
-    const mod = await import("./config-example.generated.js");
-    return typeof mod.CONFIG_EXAMPLE === "string" ? mod.CONFIG_EXAMPLE : null;
-  } catch {
-    return null;
-  }
+function getBundledConfigExample(): string | null {
+  return BUNDLED_CONFIG_EXAMPLE.trim().length > 0 ? BUNDLED_CONFIG_EXAMPLE : null;
 }
 
-async function loadConfigExample(options: ConfigBootstrapOptions): Promise<string> {
+function loadConfigExample(options: ConfigBootstrapOptions): string {
   if (options.exampleText !== undefined) {
     return options.exampleText;
   }
 
   if (options.preferBundledExample) {
-    const generated = await loadGeneratedConfigExample();
-    if (generated !== null) {
-      return generated;
+    const bundled = getBundledConfigExample();
+    if (bundled !== null) {
+      return bundled;
     }
   }
 
@@ -33,9 +30,9 @@ async function loadConfigExample(options: ConfigBootstrapOptions): Promise<strin
     return readFileSync(examplePath, "utf-8");
   }
 
-  const generated = await loadGeneratedConfigExample();
-  if (generated !== null) {
-    return generated;
+  const bundled = getBundledConfigExample();
+  if (bundled !== null) {
+    return bundled;
   }
 
   throw new Error(

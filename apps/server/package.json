@@ -13,10 +13,10 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup",
-    "dev": "bun --watch src/index.ts",
+    "build": "bun ../../scripts/embed-config-example.mjs && tsup",
+    "dev": "bun ../../scripts/embed-config-example.mjs && bun --watch src/index.ts",
     "start": "bun --smol dist/index.js",
-    "test": "vitest run --passWithNoTests"
+    "test": "bun ../../scripts/embed-config-example.mjs && vitest run --passWithNoTests"
   },
   "dependencies": {
     "@meta-search/config": "workspace:*",
