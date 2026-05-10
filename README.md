@@ -35,7 +35,7 @@ apps/
 # Prerequisites: Bun >= 1.3
 
 # Clone and install
-git clone https://github.com/lieyan666/mcp-server-meta-search.git
+git clone https://github.com/DYLCKH/mcp-server-meta-search.git
 cd mcp-server-meta-search
 bun install
 
@@ -76,7 +76,9 @@ The server uses **JSONC** (`config.jsonc`) as its primary configuration format. 
 ### Config Resolution Order
 
 1. Load `config.jsonc` (path from `CONFIG_PATH` env var, defaults to `./config.jsonc`)
-2. Validate the file and apply built-in defaults for omitted fields
+2. If the file is missing, write the bundled `config.jsonc.example` to that path and exit
+3. Validate the file and apply built-in defaults for omitted fields
+4. Apply `PORT` and `HOST` environment variable overrides for listen settings
 
 ### Environment Variables
 
@@ -86,14 +88,16 @@ The server uses **JSONC** (`config.jsonc`) as its primary configuration format. 
 |---------|---------|-------------|
 | `CONFIG_PATH` | `./config.jsonc` | Path to config file |
 | `LOGS_DB_PATH` | `./logs.db` | Path to SQLite database |
-| `PORT` | `3000` | HTTP listen port |
-| `HOST` | `0.0.0.0` | HTTP listen address |
+| `PORT` | `server.port` | Override HTTP listen port |
+| `HOST` | `server.host` | Override HTTP listen address |
 | `NODE_ENV` | — | Set to `production` for secure cookies |
 
 ### All Config Fields
 
 | Field | Default | Description |
 |-------|---------|-------------|
+| `server.host` | `0.0.0.0` | HTTP listen address |
+| `server.port` | `3000` | HTTP listen port |
 | `tavily.api_keys` | — | Tavily API key(s) |
 | `tavily.base_url` | `https://api.tavily.com` | Tavily API base URL |
 | `exa.api_keys` | — | Exa API key(s) |
@@ -111,7 +115,7 @@ The server uses **JSONC** (`config.jsonc`) as its primary configuration format. 
 | `max_disable_before_revoke` | `3` | Failures before permanent revocation |
 | `invalid_keys_file` | `invalid-keys.json` | File path for revoked keys |
 | `ota.enabled` | `true` | Enable Admin API/WebUI self-update operations |
-| `ota.repository` | `lieyan666/mcp-server-meta-search` | GitHub `owner/repo` used for static release downloads |
+| `ota.repository` | `DYLCKH/mcp-server-meta-search` | GitHub `owner/repo` used for static release downloads |
 | `ota.tag` | `dev` | Release tag to download from |
 | `ota.asset_name` | platform binary | Optional release asset name override |
 | `ota.version_url` | release `version.txt` | Optional version file URL override |
@@ -250,7 +254,7 @@ tag is `dev`, and the server downloads directly from static release URLs such
 as:
 
 ```
-https://github.com/lieyan666/mcp-server-meta-search/releases/download/dev/meta-search-linux-x64
+https://github.com/DYLCKH/mcp-server-meta-search/releases/download/dev/meta-search-linux-x64
 ```
 
 No GitHub API calls are made, so normal GitHub API rate limits are avoided.
@@ -305,7 +309,12 @@ bun run build:binary --target bun-linux-x64
 ```
 
 The binary reads the same `CONFIG_PATH`, `LOGS_DB_PATH`, `PORT`, and `HOST`
-environment variables as the source-mode server.
+environment variables as the source-mode server. `PORT` and `HOST` override
+`server.port` and `server.host` from `config.jsonc`.
+
+The single-file binary also includes `config.jsonc.example`. On first run, if
+`CONFIG_PATH` does not exist, it writes that example config to disk and exits so
+you can edit credentials before starting the server.
 
 For memory-constrained hosts, prefer the single binary. On a 128 MB instance,
 keep cache byte limits enabled unless you have measured spare headroom.

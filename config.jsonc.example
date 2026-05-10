@@ -6,6 +6,13 @@
   // All fields are optional unless marked required. Defaults are shown below.
   // =========================================================================
 
+  // === Server Listen Settings ===
+  // PORT and HOST environment variables override these values at startup.
+  "server": {
+    "host": "0.0.0.0",
+    "port": 3000
+  },
+
   // === Provider API Keys ===
 
   // Tavily (https://tavily.com)
@@ -82,7 +89,7 @@
   // checks "versions.txt" and "versons.txt" for compatibility.
   "ota": {
     "enabled": true,
-    "repository": "lieyan666/mcp-server-meta-search",
+    "repository": "DYLCKH/mcp-server-meta-search",
     "tag": "dev",
 
     // Optional. Defaults to the current platform's binary name, e.g.

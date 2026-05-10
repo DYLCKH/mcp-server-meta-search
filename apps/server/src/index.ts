@@ -36,6 +36,7 @@ import { bootstrapAdminPassword } from "./admin/bootstrap.js";
 import { resolveAppPath, resolveStaticAssetPath } from "./path-utils.js";
 import { buildRuntimeState } from "./runtime-state.js";
 import { getEmbeddedAsset } from "./static-assets.js";
+import { ensureConfigFile } from "./config-bootstrap.js";
 
 // ---------------------------------------------------------------------------
 // Proxy Support
@@ -182,6 +183,19 @@ function formatBytes(bytes: number): string {
   return `${bytes}B`;
 }
 
+function resolveListenPort(envPort: string | undefined, configPort: number): number {
+  if (envPort === undefined) {
+    return configPort;
+  }
+
+  const port = Number.parseInt(envPort, 10);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`Invalid PORT value "${envPort}". Expected an integer from 1 to 65535.`);
+  }
+
+  return port;
+}
+
 // ---------------------------------------------------------------------------
 // Application
 // ---------------------------------------------------------------------------
@@ -196,6 +210,19 @@ async function main(): Promise<void> {
     WORKSPACE_ROOT,
   );
   const configDir = dirname(configPath);
+  const createdConfig = await ensureConfigFile(configPath, {
+    workspaceRoot: WORKSPACE_ROOT,
+    preferBundledExample: IS_COMPILED,
+  });
+  if (createdConfig) {
+    process.stderr.write(
+      `[meta-search] Config not found. Created ${configPath} from bundled config.jsonc.example.\n`,
+    );
+    process.stderr.write(
+      "[meta-search] Edit the config file with your API keys and restart the server.\n",
+    );
+    return;
+  }
 
   // 2a. Hash any plaintext admin.password in config and persist back to disk
   //     before we resolve the config into runtime state.
@@ -341,8 +368,8 @@ async function main(): Promise<void> {
   app.get("/app/*", serveAppAssets);
 
   // 12. Start listening
-  const port = parseInt(process.env.PORT ?? "3000", 10);
-  const hostname = process.env.HOST ?? "0.0.0.0";
+  const port = resolveListenPort(process.env.PORT, config.server.port);
+  const hostname = process.env.HOST ?? config.server.host;
 
   const server = Bun.serve({
     port,

@@ -55,9 +55,11 @@ function getBuildVersion() {
 console.log("[build-binary] Building web frontend...");
 run("bun run --filter @meta-search/web build");
 
-// 2. Generate embedded assets
+// 2. Generate embedded assets and config example
 console.log("[build-binary] Embedding web assets...");
 run("bun ./scripts/embed-assets.mjs");
+console.log("[build-binary] Embedding config example...");
+run("bun ./scripts/embed-config-example.mjs");
 
 // 3. Build workspace packages (shared, config, runtime) so tsup outputs are available
 console.log("[build-binary] Building workspace packages...");

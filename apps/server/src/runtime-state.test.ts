@@ -4,6 +4,10 @@ import { buildRuntimeState } from "./runtime-state.js";
 
 function createConfig(): ResolvedConfig {
   return {
+    server: {
+      host: "0.0.0.0",
+      port: 3000,
+    },
     tavily: undefined,
     exa: undefined,
     perplexity: undefined,
@@ -39,7 +43,7 @@ function createConfig(): ResolvedConfig {
     },
     ota: {
       enabled: false,
-      repository: "lieyan666/mcp-server-meta-search",
+      repository: "DYLCKH/mcp-server-meta-search",
       tag: "dev",
       request_timeout_ms: 60_000,
       restart_delay_ms: 500,

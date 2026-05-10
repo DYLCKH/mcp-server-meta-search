@@ -14,7 +14,8 @@
     "start": "bun run --filter @meta-search/server start",
     "clean": "bun ./scripts/clean.mjs",
     "build:binary": "bun ./scripts/build-binary.mjs",
-    "embed-assets": "bun ./scripts/embed-assets.mjs"
+    "embed-assets": "bun ./scripts/embed-assets.mjs",
+    "embed-config-example": "bun ./scripts/embed-config-example.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",

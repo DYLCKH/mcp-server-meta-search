@@ -4,10 +4,13 @@ import { createServer } from "node:net";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { resolveConfig } from "../packages/config/src/index.ts";
 
 const BUN_BIN = process.env.BUN_BIN || (process.platform === "win32" ? "bun.exe" : "bun");
 const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = resolve(SCRIPTS_DIR, "..");
 const DEV_STATE_FILE = resolve(SCRIPTS_DIR, "..", ".dev-runtime", "ports.json");
+let cachedConfig = null;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -15,7 +18,15 @@ function sleep(ms) {
 
 function toPort(value, fallback) {
   const port = Number.parseInt(String(value ?? ""), 10);
-  return Number.isInteger(port) && port > 0 ? port : fallback;
+  return Number.isInteger(port) && port > 0 && port <= 65535 ? port : fallback;
+}
+
+function getConfig() {
+  if (!cachedConfig) {
+    cachedConfig = resolveConfig(resolve(PROJECT_ROOT, process.env.CONFIG_PATH ?? "config.jsonc"));
+  }
+
+  return cachedConfig;
 }
 
 export function getDisplayHost(host) {
@@ -23,11 +34,11 @@ export function getDisplayHost(host) {
 }
 
 export function getServerHost() {
-  return process.env.HOST || "0.0.0.0";
+  return process.env.HOST || getConfig().server.host;
 }
 
 export function getServerPort() {
-  return toPort(process.env.PORT, 3000);
+  return toPort(process.env.PORT, getConfig().server.port);
 }
 
 export function getWebHost() {

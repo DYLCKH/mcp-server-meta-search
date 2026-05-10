@@ -9,6 +9,10 @@ import {
 
 function createConfig(baseUrl: string, apiKey: string): ResolvedConfig {
   return {
+    server: {
+      host: "0.0.0.0",
+      port: 3000,
+    },
     tavily: {
       base_url: baseUrl,
       api_keys: [apiKey],
@@ -47,7 +51,7 @@ function createConfig(baseUrl: string, apiKey: string): ResolvedConfig {
     },
     ota: {
       enabled: false,
-      repository: "lieyan666/mcp-server-meta-search",
+      repository: "DYLCKH/mcp-server-meta-search",
       tag: "dev",
       request_timeout_ms: 60_000,
       restart_delay_ms: 500,

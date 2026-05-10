@@ -58,6 +58,11 @@ const CloudflareConfigSchema = z.object({
   base_url: z.string().optional(),
 });
 
+const ServerConfigSchema = z.object({
+  host: z.string().min(1).optional(),
+  port: z.number().int().min(1).max(65535).optional(),
+});
+
 const PatRecordSchema = z.object({
   name: z.string(),
   prefix: z.string(),
@@ -124,6 +129,7 @@ const OtaSchema = z.object({
 }).optional();
 
 const AppConfigSchema = z.object({
+  server: ServerConfigSchema.optional(),
   tavily: ProviderKeysSchema.optional(),
   exa: ProviderKeysSchema.optional(),
   perplexity: ProviderKeysSchema.optional(),
@@ -149,10 +155,16 @@ export type AppConfig = z.infer<typeof AppConfigSchema>;
 export type ProviderKeys = z.infer<typeof ProviderKeysSchema>;
 export type CloudflareAccount = z.infer<typeof CloudflareAccountSchema>;
 export type CloudflareConfig = z.infer<typeof CloudflareConfigSchema>;
+export type ServerConfig = z.infer<typeof ServerConfigSchema>;
 export type PatRecord = z.infer<typeof PatRecordSchema>;
 export type AdminAuth = z.infer<typeof AdminAuthSchema>;
 export type PerformanceConfig = z.infer<typeof PerformanceSchema>;
 export type OtaConfig = z.infer<typeof OtaSchema>;
+
+export interface ResolvedServerConfig {
+  host: string;
+  port: number;
+}
 
 export interface ResolvedPerformanceConfig {
   cache: {
@@ -192,6 +204,7 @@ export interface ResolvedOtaConfig {
 }
 
 export interface ResolvedConfig {
+  server: ResolvedServerConfig;
   tavily?: ProviderKeys;
   exa?: ProviderKeys;
   perplexity?: ProviderKeys;
@@ -213,13 +226,17 @@ export interface ResolvedConfig {
 // Schema Export
 // ---------------------------------------------------------------------------
 
-export { AppConfigSchema, ProviderKeysSchema, CloudflareAccountSchema, CloudflareConfigSchema, PatRecordSchema, AdminAuthSchema };
+export { AppConfigSchema, ProviderKeysSchema, CloudflareAccountSchema, CloudflareConfigSchema, ServerConfigSchema, PatRecordSchema, AdminAuthSchema };
 
 // ---------------------------------------------------------------------------
 // Config Loading
 // ---------------------------------------------------------------------------
 
 const DEFAULTS = {
+  server: {
+    host: "0.0.0.0",
+    port: 3000,
+  },
   key_rotation_strategy: "round_robin" as const,
   max_attempts_per_request: 0,
   request_timeout_ms: 30000,
@@ -240,7 +257,7 @@ const DEFAULTS = {
   } satisfies ResolvedPerformanceConfig,
   ota: {
     enabled: true,
-    repository: "lieyan666/mcp-server-meta-search",
+    repository: "DYLCKH/mcp-server-meta-search",
     tag: "dev",
     request_timeout_ms: 60_000,
     restart_delay_ms: 500,
@@ -358,6 +375,7 @@ export function resolveConfig(configPath: string): ResolvedConfig {
   const config = loadConfig(configPath);
 
   const result: ResolvedConfig = {
+    server: resolveServer(config.server),
     tavily: config.tavily,
     exa: config.exa,
     perplexity: config.perplexity,
@@ -375,6 +393,14 @@ export function resolveConfig(configPath: string): ResolvedConfig {
     ota: resolveOta(config.ota),
   };
   return result;
+}
+
+function resolveServer(server?: ServerConfig): ResolvedServerConfig {
+  const d = DEFAULTS.server;
+  return {
+    host: server?.host ?? d.host,
+    port: server?.port ?? d.port,
+  };
 }
 
 function resolveOta(ota?: OtaConfig): ResolvedOtaConfig {

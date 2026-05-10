@@ -1,6 +1,6 @@
 [Unit]
 Description=Meta Search MCP Server
-Documentation=https://github.com/lieyan666/mcp-server-meta-search
+Documentation=https://github.com/DYLCKH/mcp-server-meta-search
 After=network.target
 
 [Service]
@@ -16,8 +16,9 @@ RestartSec=5
 Environment=NODE_ENV=production
 Environment=CONFIG_PATH=/opt/meta-search/config.jsonc
 Environment=LOGS_DB_PATH=/opt/meta-search/data/logs.db
-Environment=PORT=3000
-Environment=HOST=127.0.0.1
+# Uncomment to override server.port/server.host from config.jsonc.
+# Environment=PORT=3000
+# Environment=HOST=127.0.0.1
 
 # Security hardening
 NoNewPrivileges=true

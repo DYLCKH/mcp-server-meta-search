@@ -16,6 +16,7 @@ const steps = [
   ["runtime package", "bun run --filter @meta-search/runtime build"],
   ["web app", "bun run --filter @meta-search/web build"],
   ["embedded assets", "bun ./scripts/embed-assets.mjs"],
+  ["embedded config example", "bun ./scripts/embed-config-example.mjs"],
   ["server app", "bun run --filter @meta-search/server build"],
 ];
 

@@ -16,4 +16,5 @@ config.jsonc
 invalid-keys.json
 package-lock.json
 apps/server/src/embedded-assets.generated.ts
+apps/server/src/config-example.generated.ts
 dist-bin/

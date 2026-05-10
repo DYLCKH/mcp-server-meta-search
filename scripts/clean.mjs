@@ -8,6 +8,7 @@ const paths = [
   "dist-bin",
   "apps/server/dist",
   "apps/server/src/embedded-assets.generated.ts",
+  "apps/server/src/config-example.generated.ts",
   "apps/web/dist",
   "packages/config/dist",
   "packages/runtime/dist",
