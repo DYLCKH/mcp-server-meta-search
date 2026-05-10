@@ -21,6 +21,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { DashboardPage } from "@/pages/dashboard-page";
 import { LoginPage } from "@/pages/login-page";
 import { LogsPage } from "@/pages/logs-page";
+import { OtaPage } from "@/pages/ota-page";
 import { PatsPage } from "@/pages/pats-page";
 import { ProvidersPage } from "@/pages/providers-page";
 import { SettingsPage } from "@/pages/settings-page";
@@ -120,6 +121,7 @@ export default function App() {
           <Route path="/providers" element={<ProvidersPage />} />
           <Route path="/pats" element={<PatsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/ota" element={<OtaPage />} />
           <Route path="/logs" element={<LogsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

@@ -12,12 +12,13 @@
  *   bun-windows-x64
  */
 import { execSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dirname, "..");
 const ENTRY = join(ROOT, "apps", "server", "src", "index.ts");
 const OUT_DIR = join(ROOT, "dist-bin");
+const pkg = JSON.parse(readFileSync(join(ROOT, "apps", "server", "package.json"), "utf-8"));
 
 const args = process.argv.slice(2);
 let target = null;
@@ -31,6 +32,23 @@ for (let i = 0; i < args.length; i++) {
 function run(cmd, opts = {}) {
   console.log(`$ ${cmd}`);
   execSync(cmd, { stdio: "inherit", cwd: ROOT, ...opts });
+}
+
+function getBuildVersion() {
+  if (process.env.META_SEARCH_VERSION) return process.env.META_SEARCH_VERSION;
+
+  let gitSha = "unknown";
+  try {
+    gitSha = execSync("git rev-parse --short HEAD", {
+      cwd: ROOT,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    // Keep the build usable outside a git checkout.
+  }
+
+  return `${pkg.version}+${gitSha}`;
 }
 
 // 1. Build web frontend
@@ -73,9 +91,15 @@ run(compileCmd);
 if (existsSync(outPath)) {
   const { statSync } = await import("node:fs");
   const size = statSync(outPath).size;
+  const version = getBuildVersion();
+  writeFileSync(join(OUT_DIR, "version.txt"), `${version}\n`, "utf-8");
+  writeFileSync(join(OUT_DIR, "versions.txt"), `${version}\n`, "utf-8");
+  writeFileSync(join(OUT_DIR, "versons.txt"), `${version}\n`, "utf-8");
+  writeFileSync(`${outPath}.version`, `${version}\n`, "utf-8");
   console.log(
     `[build-binary] Done: ${outName} (${(size / 1024 / 1024).toFixed(1)} MB)`,
   );
+  console.log(`[build-binary] Version: ${version}`);
 } else {
   console.error("[build-binary] Build failed — output not found");
   process.exit(1);

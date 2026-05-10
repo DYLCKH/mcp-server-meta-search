@@ -40,6 +40,9 @@ describe("resolveConfig", () => {
       expect(config.performance.cache.maxEntryBytes).toBe(256 * 1024);
       expect(config.performance.concurrency.maxConcurrency).toBe(8);
       expect(config.performance.concurrency.maxQueueSize).toBe(64);
+      expect(config.ota.enabled).toBe(true);
+      expect(config.ota.repository).toBe("lieyan666/mcp-server-meta-search");
+      expect(config.ota.tag).toBe("dev");
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }

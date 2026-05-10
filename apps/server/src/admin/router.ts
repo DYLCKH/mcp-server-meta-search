@@ -7,6 +7,7 @@ import { createSettingsRoutes } from "./settings.js";
 import { createLogRoutes } from "./logs.js";
 import { createReloadRoutes } from "./reload.js";
 import { createDashboardRoutes } from "./dashboard.js";
+import { createOtaRoutes } from "./ota.js";
 
 /**
  * Create the admin API router. All routes are mounted under the returned
@@ -56,6 +57,12 @@ export function createAdminRouter(deps: AdminDeps): Hono {
   app.use("/reload", authMiddleware);
   app.use("/reload/*", authMiddleware);
   app.route("/reload", reloadRoutes);
+
+  // OTA
+  const otaRoutes = createOtaRoutes(deps);
+  app.use("/ota", authMiddleware);
+  app.use("/ota/*", authMiddleware);
+  app.route("/ota", otaRoutes);
 
   return app;
 }

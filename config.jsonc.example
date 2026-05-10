@@ -72,6 +72,41 @@
   // File path for recording revoked keys (relative to working directory)
   "invalid_keys_file": "invalid-keys.json",
 
+  // === OTA Self-Update ===
+  // Uses static GitHub release asset URLs to avoid GitHub API rate limits.
+  // The default tag is "dev", so the server downloads directly from:
+  //   https://github.com/<repository>/releases/download/dev/<asset>
+  //
+  // Publish "version.txt" beside the binary to let the server skip updates
+  // when the installed version already matches the release. The server also
+  // checks "versions.txt" and "versons.txt" for compatibility.
+  "ota": {
+    "enabled": true,
+    "repository": "lieyan666/mcp-server-meta-search",
+    "tag": "dev",
+
+    // Optional. Defaults to the current platform's binary name, e.g.
+    // meta-search-linux-x64, meta-search-darwin-arm64, or
+    // meta-search-windows-x64.exe.
+    // "asset_name": "meta-search-linux-x64",
+
+    // Optional direct overrides if assets are mirrored elsewhere.
+    // "asset_url": "https://example.com/meta-search-linux-x64",
+    // "version_url": "https://example.com/version.txt",
+
+    // Required when not running as a packaged meta-search binary. This
+    // prevents a dev process from accidentally trying to replace bun/node.
+    // "binary_path": "/usr/local/bin/meta-search",
+    // "version_file": "/usr/local/bin/meta-search.version",
+
+    "request_timeout_ms": 60000,
+    "restart_delay_ms": 500,
+
+    // "self" starts the updated binary after the current process exits.
+    // "exit" only exits after install, for systemd/supervisord restarts.
+    "restart_strategy": "self"
+  },
+
   // === Authentication ===
 
   // Admin panel credentials & session settings.

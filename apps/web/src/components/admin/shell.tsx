@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  CloudDownload,
   KeyRound,
   LayoutDashboard,
   LockKeyhole,
@@ -33,6 +34,7 @@ const ICONS = {
   "/providers": KeyRound,
   "/pats": LockKeyhole,
   "/settings": Settings2,
+  "/ota": CloudDownload,
   "/logs": Logs,
 } as const;
 

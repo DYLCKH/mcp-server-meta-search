@@ -24,6 +24,7 @@ apps/
 - **Performance**: in-memory cache, concurrency limiter, circuit breaker, single-flight dedup, Prometheus metrics
 - **SQLite logging**: request logs and audit trail with batched writes
 - **Config hot reload**: update settings without restart via Admin API
+- **OTA self-update**: download fixed-tag release assets directly and restart in place
 - **Streamable HTTP transport**: standard MCP over HTTP POST
 
 ## Quick Start
@@ -109,6 +110,13 @@ The server uses **JSONC** (`config.jsonc`) as its primary configuration format. 
 | `key_recovery_interval_ms` | `300000` | Time before disabled key retries (5 min) |
 | `max_disable_before_revoke` | `3` | Failures before permanent revocation |
 | `invalid_keys_file` | `invalid-keys.json` | File path for revoked keys |
+| `ota.enabled` | `true` | Enable Admin API/WebUI self-update operations |
+| `ota.repository` | `lieyan666/mcp-server-meta-search` | GitHub `owner/repo` used for static release downloads |
+| `ota.tag` | `dev` | Release tag to download from |
+| `ota.asset_name` | platform binary | Optional release asset name override |
+| `ota.version_url` | release `version.txt` | Optional version file URL override |
+| `ota.binary_path` | current binary | Optional install target override |
+| `ota.restart_strategy` | `self` | `self` starts the new binary; `exit` lets a supervisor restart |
 | `admin.password` | — | Plaintext password (transient). Hashed to `password_hash` on startup, then removed from the file. |
 | `admin.password_hash` | — | Argon2id-encoded password hash. Written automatically; legacy SHA-256 hex still accepted and auto-upgraded on next login. |
 | `admin.session_secret` | — | Secret for signing session cookies |
@@ -221,6 +229,9 @@ All `/api/admin/*` routes (except login/logout) require an authenticated admin s
 | `GET` | `/api/admin/settings` | Current global settings |
 | `PUT` | `/api/admin/settings` | Update settings (triggers hot reload) |
 | `POST` | `/api/admin/reload` | Reload config from disk and apply |
+| `GET` | `/api/admin/ota/status` | Current OTA config, local version, and release URLs |
+| `POST` | `/api/admin/ota/check` | Fetch remote `version.txt` and compare with local version |
+| `POST` | `/api/admin/ota/update` | Download, replace binary, and restart (`{force?, restart?}`) |
 | `GET` | `/api/admin/logs/requests` | MCP request logs (query: tool, provider, status, from, to, limit, offset) |
 | `GET` | `/api/admin/logs/audit` | Audit logs (query: action, target, target_type, from, to, limit, offset) |
 
@@ -230,6 +241,27 @@ All `/api/admin/*` routes (except login/logout) require an authenticated admin s
 |--------|------|-------------|
 | `GET` | `/app` | Admin dashboard SPA |
 | `GET` | `/app/*` | Static assets (SPA with fallback routing) |
+
+## OTA Self-Update
+
+OTA is enabled by default and uses the repository's rolling `dev` release.
+Publish the binary as a release asset under the configured tag. The default
+tag is `dev`, and the server downloads directly from static release URLs such
+as:
+
+```
+https://github.com/lieyan666/mcp-server-meta-search/releases/download/dev/meta-search-linux-x64
+```
+
+No GitHub API calls are made, so normal GitHub API rate limits are avoided.
+Publish a `version.txt` asset beside the binary to let `/api/admin/ota/check`
+skip installs when the local version matches the release. The server also
+checks `versions.txt` and `versons.txt` aliases. Without a version file,
+`/api/admin/ota/update` requires `{ "force": true }`.
+
+When running under a process manager, set `"restart_strategy": "exit"` and let
+the supervisor restart the updated binary. With the default `"self"` strategy,
+the server starts the updated binary after the current process exits.
 
 ## Key Rotation & Health Tracking
 

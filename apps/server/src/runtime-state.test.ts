@@ -37,6 +37,14 @@ function createConfig(): ResolvedConfig {
         enabled: false,
       },
     },
+    ota: {
+      enabled: false,
+      repository: "lieyan666/mcp-server-meta-search",
+      tag: "dev",
+      request_timeout_ms: 60_000,
+      restart_delay_ms: 500,
+      restart_strategy: "self",
+    },
   };
 }
 

@@ -56,6 +56,31 @@ export interface SettingsData {
   max_disable_before_revoke: number;
 }
 
+export interface OtaStatus {
+  enabled: boolean;
+  repository: string;
+  tag: string;
+  assetName: string;
+  assetUrl: string;
+  versionUrl: string;
+  versionUrls?: string[];
+  currentVersion: string | null;
+  binaryPath: string;
+  versionFile: string;
+  restartStrategy: "self" | "exit";
+  updateSupported: boolean;
+  unsupportedReason: string | null;
+  remoteVersion?: string | null;
+  updateAvailable?: boolean | null;
+}
+
+export interface OtaUpdateResult extends OtaStatus {
+  ok?: true;
+  updated: boolean;
+  backupPath: string | null;
+  restartScheduled: boolean;
+}
+
 export interface RequestLog {
   createdAt: string | null;
   latency: number | null;
@@ -412,6 +437,23 @@ export const api = {
     return request<{ ok: true; settings: SettingsData }>("/settings", {
       method: "PUT",
       body: JSON.stringify(settings),
+    });
+  },
+
+  getOtaStatus() {
+    return request<OtaStatus>("/ota/status");
+  },
+
+  checkOta() {
+    return request<OtaStatus>("/ota/check", {
+      method: "POST",
+    });
+  },
+
+  updateOta(options: { force?: boolean; restart?: boolean }) {
+    return request<OtaUpdateResult>("/ota/update", {
+      method: "POST",
+      body: JSON.stringify(options),
     });
   },
 

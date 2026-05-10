@@ -27,6 +27,20 @@ export interface GlobalSettings {
   invalid_keys_file?: string;
 }
 
+export interface OtaConfig {
+  enabled?: boolean;
+  repository?: string;
+  tag?: string;
+  asset_name?: string;
+  asset_url?: string;
+  version_url?: string;
+  binary_path?: string;
+  version_file?: string;
+  request_timeout_ms?: number;
+  restart_delay_ms?: number;
+  restart_strategy?: "self" | "exit";
+}
+
 export interface PatRecord {
   name: string;
   prefix: string;
@@ -46,6 +60,7 @@ export interface AppConfig {
   jina?: ProviderConfig;
   cloudflare?: CloudflareConfig;
   settings?: GlobalSettings;
+  ota?: OtaConfig;
   pats?: PatRecord[];
   // Allow flat access to global settings keys
   key_rotation_strategy?: "round_robin" | "random";

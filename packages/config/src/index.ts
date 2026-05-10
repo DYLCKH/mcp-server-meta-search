@@ -109,6 +109,20 @@ const PerformanceSchema = z.object({
   }).optional(),
 }).optional();
 
+const OtaSchema = z.object({
+  enabled: z.boolean().optional(),
+  repository: z.string().optional(),
+  tag: z.string().optional(),
+  asset_name: z.string().optional(),
+  asset_url: z.string().optional(),
+  version_url: z.string().optional(),
+  binary_path: z.string().optional(),
+  version_file: z.string().optional(),
+  request_timeout_ms: z.number().optional(),
+  restart_delay_ms: z.number().optional(),
+  restart_strategy: z.enum(["self", "exit"]).optional(),
+}).optional();
+
 const AppConfigSchema = z.object({
   tavily: ProviderKeysSchema.optional(),
   exa: ProviderKeysSchema.optional(),
@@ -124,6 +138,7 @@ const AppConfigSchema = z.object({
   pats: z.array(PatRecordSchema).optional(),
   admin: AdminAuthSchema.optional(),
   performance: PerformanceSchema,
+  ota: OtaSchema,
 });
 
 // ---------------------------------------------------------------------------
@@ -137,6 +152,7 @@ export type CloudflareConfig = z.infer<typeof CloudflareConfigSchema>;
 export type PatRecord = z.infer<typeof PatRecordSchema>;
 export type AdminAuth = z.infer<typeof AdminAuthSchema>;
 export type PerformanceConfig = z.infer<typeof PerformanceSchema>;
+export type OtaConfig = z.infer<typeof OtaSchema>;
 
 export interface ResolvedPerformanceConfig {
   cache: {
@@ -161,6 +177,20 @@ export interface ResolvedPerformanceConfig {
   };
 }
 
+export interface ResolvedOtaConfig {
+  enabled: boolean;
+  repository: string;
+  tag: string;
+  asset_name?: string;
+  asset_url?: string;
+  version_url?: string;
+  binary_path?: string;
+  version_file?: string;
+  request_timeout_ms: number;
+  restart_delay_ms: number;
+  restart_strategy: "self" | "exit";
+}
+
 export interface ResolvedConfig {
   tavily?: ProviderKeys;
   exa?: ProviderKeys;
@@ -176,6 +206,7 @@ export interface ResolvedConfig {
   max_disable_before_revoke: number;
   invalid_keys_file: string;
   performance: ResolvedPerformanceConfig;
+  ota: ResolvedOtaConfig;
 }
 
 // ---------------------------------------------------------------------------
@@ -207,6 +238,14 @@ const DEFAULTS = {
     circuitBreaker: { enabled: true, failureThreshold: 5, resetTimeoutMs: 30_000 },
     singleFlight: { enabled: true },
   } satisfies ResolvedPerformanceConfig,
+  ota: {
+    enabled: true,
+    repository: "lieyan666/mcp-server-meta-search",
+    tag: "dev",
+    request_timeout_ms: 60_000,
+    restart_delay_ms: 500,
+    restart_strategy: "self" as const,
+  },
 };
 
 /**
@@ -333,8 +372,26 @@ export function resolveConfig(configPath: string): ResolvedConfig {
     max_disable_before_revoke: config.max_disable_before_revoke ?? DEFAULTS.max_disable_before_revoke,
     invalid_keys_file: config.invalid_keys_file ?? DEFAULTS.invalid_keys_file,
     performance: resolvePerformance(config.performance),
+    ota: resolveOta(config.ota),
   };
   return result;
+}
+
+function resolveOta(ota?: OtaConfig): ResolvedOtaConfig {
+  const d = DEFAULTS.ota;
+  return {
+    enabled: ota?.enabled ?? d.enabled,
+    repository: ota?.repository ?? d.repository,
+    tag: ota?.tag ?? d.tag,
+    asset_name: ota?.asset_name,
+    asset_url: ota?.asset_url,
+    version_url: ota?.version_url,
+    binary_path: ota?.binary_path,
+    version_file: ota?.version_file,
+    request_timeout_ms: ota?.request_timeout_ms ?? d.request_timeout_ms,
+    restart_delay_ms: ota?.restart_delay_ms ?? d.restart_delay_ms,
+    restart_strategy: ota?.restart_strategy ?? d.restart_strategy,
+  };
 }
 
 function resolvePerformance(perf?: PerformanceConfig): ResolvedPerformanceConfig {

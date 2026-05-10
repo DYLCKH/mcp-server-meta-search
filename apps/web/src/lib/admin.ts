@@ -54,6 +54,12 @@ export const NAV_ITEMS: NavItem[] = [
     shortLabel: "Policy",
   },
   {
+    path: "/ota",
+    label: "OTA",
+    description: "检查 dev release 并触发服务端原地更新。",
+    shortLabel: "Update",
+  },
+  {
     path: "/logs",
     label: "Logs",
     description: "按请求和审计维度排查系统事件。",
