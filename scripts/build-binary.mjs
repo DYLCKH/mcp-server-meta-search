@@ -12,13 +12,13 @@
  *   bun-windows-x64
  */
 import { execFileSync, execSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { resolveBuildVersion } from "./resolve-build-version.mjs";
 
 const ROOT = join(import.meta.dirname, "..");
 const ENTRY = join(ROOT, "apps", "server", "src", "index.ts");
 const OUT_DIR = join(ROOT, "dist-bin");
-const pkg = JSON.parse(readFileSync(join(ROOT, "apps", "server", "package.json"), "utf-8"));
 
 const args = process.argv.slice(2);
 let target = null;
@@ -39,24 +39,7 @@ function runFile(command, args, opts = {}) {
   execFileSync(command, args, { stdio: "inherit", cwd: ROOT, ...opts });
 }
 
-function getBuildVersion() {
-  if (process.env.META_SEARCH_VERSION) return process.env.META_SEARCH_VERSION;
-
-  let gitSha = "unknown";
-  try {
-    gitSha = execSync("git rev-parse --short HEAD", {
-      cwd: ROOT,
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-  } catch {
-    // Keep the build usable outside a git checkout.
-  }
-
-  return `${pkg.version}+${gitSha}`;
-}
-
-const version = getBuildVersion();
+const version = resolveBuildVersion({ root: ROOT });
 
 // 1. Build web frontend
 console.log("[build-binary] Building web frontend...");
