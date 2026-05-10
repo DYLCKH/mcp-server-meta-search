@@ -16,7 +16,7 @@ apps/
 
 ## Features
 
-- **5 MCP tools**: Tavily, Exa, Perplexity search + Jina/Cloudflare fetch
+- **6 MCP tools**: Tavily search/crawl, Exa/Perplexity search + Jina/Cloudflare fetch
 - **Automatic key rotation** with round-robin or random strategy
 - **Key health tracking**: automatic disable, recovery, and revocation
 - **PAT authentication** for MCP tool calls (Bearer token)
@@ -170,6 +170,7 @@ Passwords are never stored in plaintext after the first launch. Legacy SHA-256 h
 | Tool | Provider | Description |
 |------|----------|-------------|
 | `search_tavily` | [Tavily](https://tavily.com/) | General-purpose web search with AI answer generation |
+| `crawl_tavily` | [Tavily Crawl](https://docs.tavily.com/documentation/api-reference/endpoint/crawl) | Website crawl with built-in extraction and path/domain controls |
 | `search_exa` | [Exa](https://exa.ai/) | AI-native search with neural, keyword, and hybrid modes |
 | `search_perplexity` | [Perplexity](https://perplexity.ai/) | Lightweight structured web search |
 | `fetch_jina_markdown` | [Jina Reader](https://jina.ai/reader/) | Default lightweight Markdown fetch for most pages |

@@ -8,6 +8,7 @@ import {
   JINA_TOOL_DEFINITION,
   KeyPool,
   PERPLEXITY_TOOL_DEFINITION,
+  TAVILY_CRAWL_TOOL_DEFINITION,
   TAVILY_TOOL_DEFINITION,
   callSingleRequest,
   callWithPerf,
@@ -81,6 +82,7 @@ function normalizeResponseTime(responseTime: unknown): string | number | null {
 
 const TOOL_PROVIDER_MAP: Record<string, string> = {
   search_tavily: "tavily",
+  crawl_tavily: "tavily",
   search_exa: "exa",
   search_perplexity: "perplexity",
   fetch_jina_markdown: "jina",
@@ -247,6 +249,80 @@ export function createTavilyToolHandler(runtimeStateRef: RuntimeStateRefLike) {
   };
 }
 
+export function createTavilyCrawlToolHandler(runtimeStateRef: RuntimeStateRefLike) {
+  return async (input: Record<string, unknown>) => {
+    const { rt, config, requestTimeoutMs, maxAttemptsPerRequest } =
+      getRuntimeRequestConfig(runtimeStateRef);
+    const tavilyBaseUrl = normalizeBaseUrl(
+      config.tavily?.base_url,
+      "https://api.tavily.com",
+    );
+
+    const payload = compactObject({
+      url: input.url,
+      instructions: input.instructions,
+      chunks_per_source: input.chunks_per_source,
+      max_depth: input.max_depth,
+      max_breadth: input.max_breadth,
+      limit: input.limit,
+      select_paths: input.select_paths,
+      select_domains: input.select_domains,
+      exclude_paths: input.exclude_paths,
+      exclude_domains: input.exclude_domains,
+      allow_external: input.allow_external,
+      include_images: input.include_images,
+      extract_depth: input.extract_depth,
+      format: input.format,
+      include_favicon: input.include_favicon,
+      timeout: input.timeout,
+    });
+
+    const { data, attempts } = await callWithPerf({
+      providerName: "tavily",
+      keyPool: rt.tavilyKeyPool,
+      timeoutMs: requestTimeoutMs,
+      configuredMaxAttempts: maxAttemptsPerRequest,
+      onKeyRevoked: rt.onKeyRevoked,
+      perf: makePerf(rt, "tavily"),
+      cacheKey: `tavily:crawl:${JSON.stringify(payload)}`,
+      buildRequest: (apiKey) => ({
+        url: `${tavilyBaseUrl}/crawl`,
+        init: {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify(payload),
+        },
+      }),
+    });
+
+    const response =
+      data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+    const normalized = {
+      provider: "tavily_crawl",
+      attempts,
+      request_id:
+        typeof response.request_id === "string" ? response.request_id : null,
+      base_url:
+        typeof response.base_url === "string" ? response.base_url : input.url,
+      response_time: normalizeResponseTime(response.response_time),
+      usage:
+        response.usage && typeof response.usage === "object"
+          ? response.usage
+          : null,
+      results: normalizeResults(response.results),
+      failed_results: normalizeResults(response.failed_results),
+    };
+
+    return {
+      content: [{ type: "text", text: stringifyForToolContent(normalized) }],
+      structuredContent: normalized,
+    };
+  };
+}
+
 function registerTools(server: McpServer, runtimeStateRef: RuntimeStateRefLike): void {
   // --- search_tavily ---
   server.registerTool(
@@ -258,6 +334,21 @@ function registerTools(server: McpServer, runtimeStateRef: RuntimeStateRefLike):
       annotations: TAVILY_TOOL_DEFINITION.annotations,
     },
     withRequestLogging("search_tavily", createTavilyToolHandler(runtimeStateRef)),
+  );
+
+  // --- crawl_tavily ---
+  server.registerTool(
+    "crawl_tavily",
+    {
+      title: TAVILY_CRAWL_TOOL_DEFINITION.title,
+      description: TAVILY_CRAWL_TOOL_DEFINITION.description,
+      inputSchema: TAVILY_CRAWL_TOOL_DEFINITION.inputSchema,
+      annotations: TAVILY_CRAWL_TOOL_DEFINITION.annotations,
+    },
+    withRequestLogging(
+      "crawl_tavily",
+      createTavilyCrawlToolHandler(runtimeStateRef),
+    ),
   );
 
   // --- search_exa ---

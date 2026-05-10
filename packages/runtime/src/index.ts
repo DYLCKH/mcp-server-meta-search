@@ -35,7 +35,14 @@ export type {
 export { createKeyRevokedHandler } from "./invalid-keys.js";
 
 // --- Provider tool definitions ---
-export { TOOL_NAME as TAVILY_TOOL_NAME, TOOL_DEFINITION as TAVILY_TOOL_DEFINITION, createTavilyHandler } from "./providers/tavily.js";
+export {
+  TOOL_NAME as TAVILY_TOOL_NAME,
+  TOOL_DEFINITION as TAVILY_TOOL_DEFINITION,
+  CRAWL_TOOL_NAME as TAVILY_CRAWL_TOOL_NAME,
+  CRAWL_TOOL_DEFINITION as TAVILY_CRAWL_TOOL_DEFINITION,
+  createTavilyHandler,
+  createTavilyCrawlHandler,
+} from "./providers/tavily.js";
 export type { TavilyHandlerDeps } from "./providers/tavily.js";
 
 export { TOOL_NAME as EXA_TOOL_NAME, TOOL_DEFINITION as EXA_TOOL_DEFINITION, createExaHandler } from "./providers/exa.js";
@@ -61,12 +68,18 @@ import { ConcurrencyLimiter } from "./perf/concurrency.js";
 import { SingleFlight } from "./perf/single-flight.js";
 import { CircuitBreaker } from "./perf/circuit-breaker.js";
 import { MetricsCollector } from "./perf/metrics.js";
-import { createTavilyHandler } from "./providers/tavily.js";
+import {
+  createTavilyHandler,
+  createTavilyCrawlHandler,
+} from "./providers/tavily.js";
 import { createExaHandler } from "./providers/exa.js";
 import { createPerplexityHandler } from "./providers/perplexity.js";
 import { createJinaHandler } from "./providers/jina.js";
 import { createCloudflareHandler } from "./providers/cloudflare.js";
-import { TOOL_DEFINITION as tavilyDef } from "./providers/tavily.js";
+import {
+  TOOL_DEFINITION as tavilyDef,
+  CRAWL_TOOL_DEFINITION as tavilyCrawlDef,
+} from "./providers/tavily.js";
 import { TOOL_DEFINITION as exaDef } from "./providers/exa.js";
 import { TOOL_DEFINITION as pplxDef } from "./providers/perplexity.js";
 import { TOOL_DEFINITION as jinaDef } from "./providers/jina.js";
@@ -77,6 +90,7 @@ export interface ProviderInstances {
     baseUrl: string;
     keyPool: KeyPool;
     handler: ReturnType<typeof createTavilyHandler>;
+    crawlHandler: ReturnType<typeof createTavilyCrawlHandler>;
   };
   exa: {
     baseUrl: string;
@@ -210,6 +224,11 @@ export function createProviders(config: ResolvedConfig, invalidKeysPath: string)
       baseUrl: tavilyBaseUrl,
       keyPool: tavilyKeyPool,
       handler: createTavilyHandler({ ...commonDeps, baseUrl: tavilyBaseUrl, keyPool: tavilyKeyPool }),
+      crawlHandler: createTavilyCrawlHandler({
+        ...commonDeps,
+        baseUrl: tavilyBaseUrl,
+        keyPool: tavilyKeyPool,
+      }),
     },
     exa: {
       baseUrl: exaBaseUrl,
@@ -248,6 +267,13 @@ export function registerAllTools(server: McpServer, providers: ProviderInstances
     inputSchema: tavilyDef.inputSchema,
     annotations: tavilyDef.annotations,
   }, providers.tavily.handler);
+
+  server.registerTool("crawl_tavily", {
+    title: tavilyCrawlDef.title,
+    description: tavilyCrawlDef.description,
+    inputSchema: tavilyCrawlDef.inputSchema,
+    annotations: tavilyCrawlDef.annotations,
+  }, providers.tavily.crawlHandler);
 
   server.registerTool("search_exa", {
     title: exaDef.title,

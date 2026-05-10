@@ -4,11 +4,13 @@ import {
   optionalIntSchema,
   optionalBoolOrEnumSchema,
   optionalBoolSchema,
+  optionalNumSchema,
 } from "@meta-search/shared";
 import type { KeyPool } from "../key-pool.js";
 import { callWithKeyRotation } from "../http-client.js";
 
 export const TOOL_NAME = "search_tavily";
+export const CRAWL_TOOL_NAME = "crawl_tavily";
 
 export const TOOL_DEFINITION = {
   title: "Tavily Search (Key Rotation)",
@@ -39,6 +41,72 @@ export const TOOL_DEFINITION = {
     include_favicon: optionalBoolSchema(),
     auto_parameters: optionalBoolSchema(),
     include_usage: optionalBoolSchema(),
+  },
+  annotations: {
+    readOnlyHint: true,
+  },
+} as const;
+
+export const CRAWL_TOOL_DEFINITION = {
+  title: "Tavily Crawl (Key Rotation)",
+  description:
+    "Crawl a website via Tavily and return extracted pages. Best for mapping and extracting multiple pages from a domain or site section.",
+  inputSchema: {
+    url: z
+      .string()
+      .min(1)
+      .describe(
+        "The root URL or domain to crawl, e.g. https://docs.tavily.com or docs.tavily.com.",
+      ),
+    instructions: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Natural-language crawl instructions. Enabling instructions increases Tavily crawl credit usage.",
+      ),
+    chunks_per_source: optionalIntSchema(z.number().int().min(1).max(5))
+      .describe("Maximum relevant chunks per source when instructions are provided (1-5)."),
+    max_depth: optionalIntSchema(z.number().int().min(1).max(5))
+      .describe("Maximum link depth from the starting URL (1-5)."),
+    max_breadth: optionalIntSchema(z.number().int().min(1).max(500))
+      .describe("Maximum links to follow per page (1-500)."),
+    limit: optionalIntSchema(z.number().int().min(1))
+      .describe("Maximum number of pages to crawl."),
+    select_paths: z
+      .array(z.string().min(1))
+      .optional()
+      .describe("Regex paths to include, e.g. ['/docs/.*']."),
+    select_domains: z
+      .array(z.string().min(1))
+      .optional()
+      .describe("Domains to include in the crawl."),
+    exclude_paths: z
+      .array(z.string().min(1))
+      .optional()
+      .describe("Regex paths to exclude, e.g. ['/private/.*']."),
+    exclude_domains: z
+      .array(z.string().min(1))
+      .optional()
+      .describe("Domains to exclude from the crawl."),
+    allow_external: optionalBoolSchema()
+      .describe("Allow crawling external links outside the starting domain."),
+    include_images: optionalBoolSchema()
+      .describe("Include image URLs in extracted page results."),
+    extract_depth: z
+      .enum(["basic", "advanced"])
+      .optional()
+      .describe(
+        "Extraction depth. 'advanced' is more comprehensive and uses more credits.",
+      ),
+    format: z
+      .enum(["markdown", "text"])
+      .optional()
+      .describe("Content format for extracted pages."),
+    include_favicon: optionalBoolSchema()
+      .describe("Include favicon URL when Tavily returns it."),
+    timeout: optionalNumSchema(z.number().min(10).max(150))
+      .describe("Crawl timeout in seconds (10-150)."),
   },
   annotations: {
     readOnlyHint: true,
@@ -116,6 +184,73 @@ export function createTavilyHandler(deps: TavilyHandlerDeps) {
 
     return {
       content: [{ type: "text" as const, text: JSON.stringify(normalized, null, 2) }],
+      structuredContent: normalized,
+    };
+  };
+}
+
+export function createTavilyCrawlHandler(deps: TavilyHandlerDeps) {
+  return async function crawlTavily(input: Record<string, unknown>) {
+    const payload = compactObject({
+      url: input.url,
+      instructions: input.instructions,
+      chunks_per_source: input.chunks_per_source,
+      max_depth: input.max_depth,
+      max_breadth: input.max_breadth,
+      limit: input.limit,
+      select_paths: input.select_paths,
+      select_domains: input.select_domains,
+      exclude_paths: input.exclude_paths,
+      exclude_domains: input.exclude_domains,
+      allow_external: input.allow_external,
+      include_images: input.include_images,
+      extract_depth: input.extract_depth,
+      format: input.format,
+      include_favicon: input.include_favicon,
+      timeout: input.timeout,
+    });
+
+    const { data, attempts } = await callWithKeyRotation({
+      providerName: "tavily",
+      keyPool: deps.keyPool,
+      timeoutMs: deps.timeoutMs,
+      configuredMaxAttempts: deps.maxAttempts,
+      onKeyRevoked: deps.onKeyRevoked,
+      buildRequest: (apiKey) => ({
+        url: `${deps.baseUrl}/crawl`,
+        init: {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify(payload),
+        },
+      }),
+    });
+
+    const response =
+      data && typeof data === "object" ? data as Record<string, unknown> : {};
+    const normalized = {
+      provider: "tavily_crawl",
+      attempts,
+      request_id:
+        typeof response.request_id === "string" ? response.request_id : null,
+      base_url:
+        typeof response.base_url === "string" ? response.base_url : input.url,
+      response_time: normalizeResponseTime(response.response_time),
+      usage:
+        response.usage && typeof response.usage === "object"
+          ? response.usage
+          : null,
+      results: normalizeResults(response.results),
+      failed_results: normalizeResults(response.failed_results),
+    };
+
+    return {
+      content: [
+        { type: "text" as const, text: JSON.stringify(normalized, null, 2) },
+      ],
       structuredContent: normalized,
     };
   };

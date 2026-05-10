@@ -13,6 +13,12 @@ before changing MCP tool parameters or upstream payload handling.
   Relevant note: `response_time` may be returned as a string, so the
   normalization layer should not assume a numeric-only value.
 
+- Tavily Crawl API:
+  [https://docs.tavily.com/documentation/api-reference/endpoint/crawl](https://docs.tavily.com/documentation/api-reference/endpoint/crawl)
+  Relevant notes: crawl supports path/domain filters, `max_depth` up to 5,
+  `max_breadth` up to 500, `timeout` up to 150 seconds, and uses the same
+  Tavily API key pool as search.
+
 - Exa Search API:
   [https://docs.exa.ai/reference/search](https://docs.exa.ai/reference/search)
   Relevant notes:

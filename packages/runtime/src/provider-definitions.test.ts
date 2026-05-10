@@ -11,6 +11,8 @@ import {
   TOOL_DEFINITION as PERPLEXITY_TOOL_DEFINITION,
 } from "./providers/perplexity.js";
 import {
+  CRAWL_TOOL_DEFINITION as TAVILY_CRAWL_TOOL_DEFINITION,
+  createTavilyCrawlHandler,
   createTavilyHandler,
 } from "./providers/tavily.js";
 
@@ -69,6 +71,32 @@ describe("provider tool definitions", () => {
       }).success,
     ).toBe(false);
   });
+
+  it("matches the current Tavily crawl limits", () => {
+    const schema = objectSchema(TAVILY_CRAWL_TOOL_DEFINITION.inputSchema);
+
+    expect(
+      schema.safeParse({
+        url: "https://docs.tavily.com",
+        max_depth: 5,
+        max_breadth: 500,
+        chunks_per_source: 5,
+        timeout: 150,
+      }).success,
+    ).toBe(true);
+    expect(
+      schema.safeParse({
+        url: "https://docs.tavily.com",
+        max_depth: 6,
+      }).success,
+    ).toBe(false);
+    expect(
+      schema.safeParse({
+        url: "https://docs.tavily.com",
+        timeout: 151,
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe("createTavilyHandler", () => {
@@ -108,6 +136,63 @@ describe("createTavilyHandler", () => {
       provider: "tavily",
       query: "latency",
       response_time: "1.67",
+    });
+  });
+});
+
+describe("createTavilyCrawlHandler", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("posts crawl requests to Tavily and normalizes results", async () => {
+    const handler = createTavilyCrawlHandler({
+      baseUrl: "https://api.tavily.com",
+      keyPool: new KeyPool({
+        providerName: "tavily",
+        keys: ["tvly-test"],
+      }),
+      timeoutMs: 1_000,
+      maxAttempts: 1,
+      onKeyRevoked: vi.fn(),
+    });
+
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(url).toBe("https://api.tavily.com/crawl");
+      expect(init?.headers).toMatchObject({
+        Authorization: "Bearer tvly-test",
+      });
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        url: "https://docs.tavily.com",
+        max_depth: 2,
+      });
+
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            base_url: "https://docs.tavily.com",
+            response_time: "2.1",
+            results: [{ url: "https://docs.tavily.com/docs" }],
+          }),
+      };
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await handler({
+      url: "https://docs.tavily.com",
+      max_depth: 2,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.structuredContent).toMatchObject({
+      provider: "tavily_crawl",
+      base_url: "https://docs.tavily.com",
+      response_time: "2.1",
+      results: [{ url: "https://docs.tavily.com/docs" }],
     });
   });
 });

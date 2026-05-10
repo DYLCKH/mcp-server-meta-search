@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ResolvedConfig } from "@meta-search/config";
 import { KeyPool } from "@meta-search/runtime";
 import {
+  createTavilyCrawlToolHandler,
   createTavilyToolHandler,
   type RuntimeState,
   type RuntimeStateRefLike,
@@ -160,6 +161,59 @@ describe("createTavilyToolHandler", () => {
       provider: "tavily",
       query: "latency",
       response_time: "1.67",
+    });
+  });
+});
+
+describe("createTavilyCrawlToolHandler", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("reads the latest runtime state and posts to /crawl", async () => {
+    const runtimeStateRef: RuntimeStateRefLike = {
+      current: createRuntimeState("https://old.example", "old-key"),
+    };
+    const handler = createTavilyCrawlToolHandler(runtimeStateRef);
+
+    runtimeStateRef.current = createRuntimeState(
+      "https://new.example",
+      "new-key",
+    );
+
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(url).toBe("https://new.example/crawl");
+      expect(init?.headers).toMatchObject({
+        Authorization: "Bearer new-key",
+      });
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        url: "https://docs.tavily.com",
+        max_depth: 2,
+      });
+
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            base_url: "https://docs.tavily.com",
+            results: [],
+          }),
+      };
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await handler({
+      url: "https://docs.tavily.com",
+      max_depth: 2,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.structuredContent).toMatchObject({
+      provider: "tavily_crawl",
+      base_url: "https://docs.tavily.com",
     });
   });
 });

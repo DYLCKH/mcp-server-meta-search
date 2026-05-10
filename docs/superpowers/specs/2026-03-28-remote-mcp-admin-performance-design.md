@@ -272,6 +272,7 @@ The engine is responsible for:
 Each provider adapter implements a consistent contract so MCP tools stay thin. The current tools remain:
 
 - `search_tavily`
+- `crawl_tavily`
 - `search_exa`
 - `search_perplexity`
 - `fetch_jina_markdown`
