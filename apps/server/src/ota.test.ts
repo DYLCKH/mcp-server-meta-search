@@ -1,4 +1,10 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -6,9 +12,11 @@ import type { ResolvedOtaConfig } from "@meta-search/config";
 import {
   applyOtaUpdate,
   buildOtaUrls,
+  checkOtaUpdate,
   detectReleaseAssetName,
   fetchRemoteVersion,
   fetchRemoteVersionCandidates,
+  readCurrentVersion,
 } from "./ota.js";
 
 const tempDirs: string[] = [];
@@ -86,10 +94,55 @@ describe("OTA release helpers", () => {
       ),
     ).resolves.toBe("v3");
   });
+
+  it("reads the bundled build version before the sidecar version file", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "meta-search-ota-"));
+    tempDirs.push(tempDir);
+    const versionFile = join(tempDir, "meta-search-linux-x64.version");
+    writeFileSync(versionFile, "v1\n");
+    vi.stubEnv("META_SEARCH_BUILD_VERSION", "v2+binary");
+
+    expect(readCurrentVersion(versionFile)).toBe("v2+binary");
+  });
+
+  it("treats a remote version as installable when the local version is missing", async () => {
+    vi.stubEnv("META_SEARCH_BUILD_VERSION", "");
+    vi.stubEnv("META_SEARCH_VERSION", "");
+    const tempDir = mkdtempSync(join(tmpdir(), "meta-search-ota-"));
+    tempDirs.push(tempDir);
+
+    const fetchImpl = vi.fn(async () => new Response("v4\n")) as unknown as typeof fetch;
+
+    await expect(
+      checkOtaUpdate(
+        createConfig({
+          version_file: join(tempDir, "missing.version"),
+        }),
+        fetchImpl,
+      ),
+    ).resolves.toMatchObject({
+      currentVersion: null,
+      remoteVersion: "v4",
+      updateAvailable: true,
+    });
+  });
 });
 
 describe("applyOtaUpdate", () => {
+  it("rejects unsupported runtimes before doing network work", async () => {
+    vi.stubEnv("META_SEARCH_BUILD_VERSION", "");
+    vi.stubEnv("META_SEARCH_VERSION", "");
+    vi.stubEnv("META_SEARCH_OTA_BINARY", "");
+    const fetchImpl = vi.fn(async () => new Response("v2\n")) as unknown as typeof fetch;
+
+    await expect(
+      applyOtaUpdate(createConfig(), { force: true, restart: false }, fetchImpl),
+    ).rejects.toThrow("Set ota.binary_path");
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("downloads, installs, backs up, and records the remote version", async () => {
+    vi.stubEnv("META_SEARCH_BUILD_VERSION", "");
     vi.stubEnv("META_SEARCH_VERSION", "");
     const tempDir = mkdtempSync(join(tmpdir(), "meta-search-ota-"));
     tempDirs.push(tempDir);
@@ -124,5 +177,40 @@ describe("applyOtaUpdate", () => {
     expect(readFileSync(binaryPath)).toEqual(Buffer.from([1, 2, 3]));
     expect(readFileSync(`${binaryPath}.bak`, "utf-8")).toBe("old-binary");
     expect(readFileSync(versionFile, "utf-8")).toBe("v2\n");
+  });
+
+  it("force-installs even when the version check endpoint fails", async () => {
+    vi.stubEnv("META_SEARCH_BUILD_VERSION", "");
+    vi.stubEnv("META_SEARCH_VERSION", "");
+    const tempDir = mkdtempSync(join(tmpdir(), "meta-search-ota-"));
+    tempDirs.push(tempDir);
+
+    const binaryPath = join(tempDir, "meta-search-linux-x64");
+    const versionFile = `${binaryPath}.version`;
+    writeFileSync(binaryPath, "old-binary");
+
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      const href = String(url);
+      if (href.endsWith("version.txt")) {
+        return new Response("temporary failure", { status: 503 });
+      }
+      return new Response(new Uint8Array([9, 8, 7]));
+    }) as unknown as typeof fetch;
+
+    const result = await applyOtaUpdate(
+      createConfig({
+        binary_path: binaryPath,
+        asset_name: "meta-search-linux-x64",
+      }),
+      { force: true, restart: false },
+      fetchImpl,
+    );
+
+    expect(result.updated).toBe(true);
+    expect(result.remoteVersion).toBeNull();
+    expect(result.updateAvailable).toBeNull();
+    expect(readFileSync(binaryPath)).toEqual(Buffer.from([9, 8, 7]));
+    expect(readFileSync(`${binaryPath}.bak`, "utf-8")).toBe("old-binary");
+    expect(existsSync(versionFile)).toBe(false);
   });
 });

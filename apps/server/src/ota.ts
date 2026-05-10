@@ -11,7 +11,6 @@ import {
 } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
-import process from "node:process";
 
 import type { ResolvedOtaConfig } from "@meta-search/config";
 
@@ -132,11 +131,18 @@ export function resolveOtaRuntimePaths(config: ResolvedOtaConfig): OtaRuntimePat
 }
 
 export function readCurrentVersion(versionFile: string): string | null {
+  const bundledVersion = readBundledVersion();
+  if (bundledVersion) return bundledVersion;
+
   if (existsSync(versionFile)) {
     const version = readFileSync(versionFile, "utf-8").trim();
     if (version) return version;
   }
   return process.env.META_SEARCH_VERSION?.trim() || null;
+}
+
+function readBundledVersion(): string | null {
+  return process.env.META_SEARCH_BUILD_VERSION?.trim() || null;
 }
 
 export function getOtaStatus(config: ResolvedOtaConfig): OtaStatus {
@@ -165,20 +171,34 @@ export async function checkOtaUpdate(
   fetchImpl: typeof fetch = fetch,
 ): Promise<OtaCheckResult> {
   const status = getOtaStatus(config);
+  return checkOtaUpdateFromStatus(status, config.request_timeout_ms, fetchImpl);
+}
+
+async function checkOtaUpdateFromStatus(
+  status: OtaStatus,
+  timeoutMs: number,
+  fetchImpl: typeof fetch,
+): Promise<OtaCheckResult> {
   const remoteVersion = await fetchRemoteVersionCandidates(
     status.versionUrls,
-    config.request_timeout_ms,
+    timeoutMs,
     fetchImpl,
   );
 
   return {
     ...status,
     remoteVersion,
-    updateAvailable:
-      status.currentVersion && remoteVersion
-        ? status.currentVersion !== remoteVersion
-        : null,
+    updateAvailable: determineUpdateAvailable(status.currentVersion, remoteVersion),
   };
+}
+
+function determineUpdateAvailable(
+  currentVersion: string | null,
+  remoteVersion: string | null,
+): boolean | null {
+  if (!remoteVersion) return null;
+  if (!currentVersion) return true;
+  return currentVersion !== remoteVersion;
 }
 
 export async function applyOtaUpdate(
@@ -190,9 +210,21 @@ export async function applyOtaUpdate(
     throw new Error("OTA is disabled. Enable ota.enabled in config.jsonc first.");
   }
 
-  const check = await checkOtaUpdate(config, fetchImpl);
-  if (!check.updateSupported) {
-    throw new Error(check.unsupportedReason ?? "OTA update is not supported in this runtime.");
+  const status = getOtaStatus(config);
+  if (!status.updateSupported) {
+    throw new Error(status.unsupportedReason ?? "OTA update is not supported in this runtime.");
+  }
+
+  let check: OtaCheckResult;
+  try {
+    check = await checkOtaUpdateFromStatus(status, config.request_timeout_ms, fetchImpl);
+  } catch (err) {
+    if (!options.force) throw err;
+    check = {
+      ...status,
+      remoteVersion: null,
+      updateAvailable: null,
+    };
   }
 
   if (!options.force && check.updateAvailable === false) {
@@ -292,19 +324,36 @@ async function downloadReleaseAsset(
   return tempPath;
 }
 
-export function installBinaryUpdate(tempPath: string, binaryPath: string): string {
+export function installBinaryUpdate(tempPath: string, binaryPath: string): string | null {
   const backupPath = `${binaryPath}.bak`;
+  let hasBackup = false;
+  let installed = false;
 
   try {
     if (existsSync(binaryPath)) {
       copyFileSync(binaryPath, backupPath);
+      hasBackup = true;
     }
     renameSync(tempPath, binaryPath);
+    installed = true;
     chmodSync(binaryPath, 0o755);
-    return backupPath;
+    return hasBackup ? backupPath : null;
   } catch (err) {
+    if (installed) {
+      try {
+        if (hasBackup) {
+          copyFileSync(backupPath, binaryPath);
+          chmodSync(binaryPath, 0o755);
+        } else {
+          unlinkSync(binaryPath);
+        }
+      } catch {
+        // Preserve the original install error.
+      }
+    }
+
     try {
-      unlinkSync(tempPath);
+      if (existsSync(tempPath)) unlinkSync(tempPath);
     } catch {
       // Ignore cleanup errors and preserve the original install error.
     }

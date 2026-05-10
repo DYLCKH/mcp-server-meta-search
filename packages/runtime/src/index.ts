@@ -40,8 +40,12 @@ export {
   TOOL_DEFINITION as TAVILY_TOOL_DEFINITION,
   CRAWL_TOOL_NAME as TAVILY_CRAWL_TOOL_NAME,
   CRAWL_TOOL_DEFINITION as TAVILY_CRAWL_TOOL_DEFINITION,
+  USAGE_TOOL_NAME as TAVILY_USAGE_TOOL_NAME,
+  USAGE_TOOL_DEFINITION as TAVILY_USAGE_TOOL_DEFINITION,
   createTavilyHandler,
   createTavilyCrawlHandler,
+  createTavilyUsageHandler,
+  normalizeTavilyUsageResponse,
 } from "./providers/tavily.js";
 export type { TavilyHandlerDeps } from "./providers/tavily.js";
 
@@ -71,6 +75,7 @@ import { MetricsCollector } from "./perf/metrics.js";
 import {
   createTavilyHandler,
   createTavilyCrawlHandler,
+  createTavilyUsageHandler,
 } from "./providers/tavily.js";
 import { createExaHandler } from "./providers/exa.js";
 import { createPerplexityHandler } from "./providers/perplexity.js";
@@ -79,6 +84,7 @@ import { createCloudflareHandler } from "./providers/cloudflare.js";
 import {
   TOOL_DEFINITION as tavilyDef,
   CRAWL_TOOL_DEFINITION as tavilyCrawlDef,
+  USAGE_TOOL_DEFINITION as tavilyUsageDef,
 } from "./providers/tavily.js";
 import { TOOL_DEFINITION as exaDef } from "./providers/exa.js";
 import { TOOL_DEFINITION as pplxDef } from "./providers/perplexity.js";
@@ -91,6 +97,7 @@ export interface ProviderInstances {
     keyPool: KeyPool;
     handler: ReturnType<typeof createTavilyHandler>;
     crawlHandler: ReturnType<typeof createTavilyCrawlHandler>;
+    usageHandler: ReturnType<typeof createTavilyUsageHandler>;
   };
   exa: {
     baseUrl: string;
@@ -229,6 +236,11 @@ export function createProviders(config: ResolvedConfig, invalidKeysPath: string)
         baseUrl: tavilyBaseUrl,
         keyPool: tavilyKeyPool,
       }),
+      usageHandler: createTavilyUsageHandler({
+        ...commonDeps,
+        baseUrl: tavilyBaseUrl,
+        keyPool: tavilyKeyPool,
+      }),
     },
     exa: {
       baseUrl: exaBaseUrl,
@@ -274,6 +286,13 @@ export function registerAllTools(server: McpServer, providers: ProviderInstances
     inputSchema: tavilyCrawlDef.inputSchema,
     annotations: tavilyCrawlDef.annotations,
   }, providers.tavily.crawlHandler);
+
+  server.registerTool("check_tavily_usage", {
+    title: tavilyUsageDef.title,
+    description: tavilyUsageDef.description,
+    inputSchema: tavilyUsageDef.inputSchema,
+    annotations: tavilyUsageDef.annotations,
+  }, providers.tavily.usageHandler);
 
   server.registerTool("search_exa", {
     title: exaDef.title,

@@ -11,7 +11,7 @@
  *   bun-darwin-x64, bun-darwin-arm64,
  *   bun-windows-x64
  */
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -34,6 +34,11 @@ function run(cmd, opts = {}) {
   execSync(cmd, { stdio: "inherit", cwd: ROOT, ...opts });
 }
 
+function runFile(command, args, opts = {}) {
+  console.log(`$ ${[command, ...args].join(" ")}`);
+  execFileSync(command, args, { stdio: "inherit", cwd: ROOT, ...opts });
+}
+
 function getBuildVersion() {
   if (process.env.META_SEARCH_VERSION) return process.env.META_SEARCH_VERSION;
 
@@ -50,6 +55,8 @@ function getBuildVersion() {
 
   return `${pkg.version}+${gitSha}`;
 }
+
+const version = getBuildVersion();
 
 // 1. Build web frontend
 console.log("[build-binary] Building web frontend...");
@@ -76,24 +83,29 @@ const outName = `meta-search-${suffix}${ext}`;
 const outPath = join(OUT_DIR, outName);
 
 // 5. Compile
-const targetFlag = target ? `--target=${target}` : "";
-const compileCmd = [
-  "bun build",
+const compileArgs = [
+  "build",
   "--compile",
   "--compile-exec-argv=--smol",
-  targetFlag,
-  `--outfile ${outPath}`,
+  "--env=META_SEARCH_BUILD_*",
+  ...(target ? [`--target=${target}`] : []),
+  "--outfile",
+  outPath,
   ENTRY,
-].filter(Boolean).join(" ");
+];
 
 console.log(`[build-binary] Compiling → ${outName}`);
-run(compileCmd);
+runFile("bun", compileArgs, {
+  env: {
+    ...process.env,
+    META_SEARCH_BUILD_VERSION: version,
+  },
+});
 
 // 6. Report
 if (existsSync(outPath)) {
   const { statSync } = await import("node:fs");
   const size = statSync(outPath).size;
-  const version = getBuildVersion();
   writeFileSync(join(OUT_DIR, "version.txt"), `${version}\n`, "utf-8");
   writeFileSync(join(OUT_DIR, "versions.txt"), `${version}\n`, "utf-8");
   writeFileSync(join(OUT_DIR, "versons.txt"), `${version}\n`, "utf-8");

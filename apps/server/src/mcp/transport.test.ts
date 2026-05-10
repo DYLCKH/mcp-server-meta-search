@@ -4,6 +4,7 @@ import { KeyPool } from "@meta-search/runtime";
 import {
   createTavilyCrawlToolHandler,
   createTavilyToolHandler,
+  createTavilyUsageToolHandler,
   type RuntimeState,
   type RuntimeStateRefLike,
 } from "./transport.js";
@@ -214,6 +215,72 @@ describe("createTavilyCrawlToolHandler", () => {
     expect(result.structuredContent).toMatchObject({
       provider: "tavily_crawl",
       base_url: "https://docs.tavily.com",
+    });
+  });
+});
+
+describe("createTavilyUsageToolHandler", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("reads latest runtime state and gets /usage", async () => {
+    const runtimeStateRef: RuntimeStateRefLike = {
+      current: createRuntimeState("https://old.example", "old-key"),
+    };
+    const handler = createTavilyUsageToolHandler(runtimeStateRef);
+
+    runtimeStateRef.current = createRuntimeState(
+      "https://new.example",
+      "new-key",
+    );
+
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(url).toBe("https://new.example/usage");
+      expect(init?.method).toBe("GET");
+      expect(init?.headers).toMatchObject({
+        Authorization: "Bearer new-key",
+        "X-Project-ID": "project-123",
+      });
+
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            key: {
+              usage: 4,
+              limit: 10,
+            },
+            account: {
+              plan_usage: 40,
+              plan_limit: 100,
+            },
+          }),
+      };
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await handler({
+      project_id: "project-123",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.structuredContent).toMatchObject({
+      provider: "tavily_usage",
+      project_id: "project-123",
+      key: {
+        usage: 4,
+        limit: 10,
+        remaining: 6,
+      },
+      account: {
+        plan_usage: 40,
+        plan_limit: 100,
+        plan_remaining: 60,
+      },
     });
   });
 });

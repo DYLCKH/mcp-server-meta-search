@@ -1,9 +1,16 @@
 import { useEffect, useState } from "react";
-import { Filter, Plus, Trash2 } from "lucide-react";
+import { Activity, Filter, Gauge, Plus, Trash2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
-import { type ProviderDetail, type ProviderKey, type ProviderSummary, api } from "@/lib/api";
+import {
+  type ProviderDetail,
+  type ProviderKey,
+  type ProviderSummary,
+  type TavilyUsageCheckResponse,
+  type TavilyUsageSection,
+  api,
+} from "@/lib/api";
 import {
   extractErrorMessage,
   providerKeyDescription,
@@ -39,6 +46,67 @@ import {
 } from "@/components/ui/table";
 import { formatDate } from "@/lib/format";
 
+function readUsageNumber(
+  section: TavilyUsageSection | null | undefined,
+  key: string,
+) {
+  const value = section?.[key];
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function formatCredits(value: number | null) {
+  if (value === null) {
+    return "-";
+  }
+
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function formatUsageLine(
+  section: TavilyUsageSection | null | undefined,
+  usageKey: string,
+  limitKey: string,
+  remainingKey: string,
+) {
+  const usage = readUsageNumber(section, usageKey);
+  const limit = readUsageNumber(section, limitKey);
+  const remaining = readUsageNumber(section, remainingKey);
+
+  if (usage === null && limit === null && remaining === null) {
+    return null;
+  }
+
+  return `${formatCredits(usage)} / ${formatCredits(limit)} · ${formatCredits(remaining)} left`;
+}
+
+function summarizeTavilyUsage(response: TavilyUsageCheckResponse) {
+  const keyUsage = formatUsageLine(
+    response.usage.key,
+    "usage",
+    "limit",
+    "remaining",
+  );
+  const accountUsage = formatUsageLine(
+    response.usage.account,
+    "plan_usage",
+    "plan_limit",
+    "plan_remaining",
+  );
+
+  return keyUsage ?? accountUsage ?? "Usage check complete";
+}
+
 export function ProvidersPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [summaries, setSummaries] = useState<ProviderSummary[]>([]);
@@ -48,6 +116,15 @@ export function ProvidersPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [addKeyOpen, setAddKeyOpen] = useState(false);
+  const [usageByIndex, setUsageByIndex] = useState<
+    Record<number, TavilyUsageCheckResponse>
+  >({});
+  const [checkingUsageIndex, setCheckingUsageIndex] = useState<number | null>(
+    null,
+  );
+  const [checkingKeyIndex, setCheckingKeyIndex] = useState<number | null>(
+    null,
+  );
   const [providerQuery, setProviderQuery] = useState("");
   const [providerScope, setProviderScope] = useState<
     "all" | "healthy" | "attention"
@@ -110,6 +187,8 @@ export function ProvidersPage() {
   }, [loading, requestedProvider, searchParams, selected, setSearchParams]);
 
   useEffect(() => {
+    setUsageByIndex({});
+
     if (!selected) {
       setDetail(null);
       setDetailError("");
@@ -171,6 +250,7 @@ export function ProvidersPage() {
   const selectedHasAttention =
     (selectedSummary?.activeKeys ?? 0) === 0 ||
     (selectedSummary?.disabledKeys ?? 0) + (selectedSummary?.revokedKeys ?? 0) > 0;
+  const showTavilyQuota = selectedSummary?.name === "tavily";
 
   const handleToggleKey = async (key: ProviderKey, index: number) => {
     if (!selected) {
@@ -201,6 +281,42 @@ export function ProvidersPage() {
       await refreshSelectedProvider(selected);
     } catch (requestError) {
       toast.error(extractErrorMessage(requestError));
+    }
+  };
+
+  const handleCheckTavilyUsage = async (index: number) => {
+    setCheckingUsageIndex(index);
+
+    try {
+      const response = await api.checkTavilyUsage(index);
+      setUsageByIndex((current) => ({
+        ...current,
+        [index]: response,
+      }));
+      toast.success(summarizeTavilyUsage(response));
+    } catch (requestError) {
+      toast.error(extractErrorMessage(requestError));
+    } finally {
+      setCheckingUsageIndex(null);
+    }
+  };
+
+  const handleCheckKey = async (index: number) => {
+    if (!selected) {
+      return;
+    }
+
+    setCheckingKeyIndex(index);
+
+    try {
+      await api.checkKey(selected, index);
+      toast.success(`${selected} key is live`);
+      await refreshSelectedProvider(selected);
+    } catch (requestError) {
+      toast.error(extractErrorMessage(requestError));
+      await refreshSelectedProvider(selected).catch(() => undefined);
+    } finally {
+      setCheckingKeyIndex(null);
     }
   };
 
@@ -422,6 +538,7 @@ export function ProvidersPage() {
                           <TableHead>Credential</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead>Last used</TableHead>
+                          {showTavilyQuota ? <TableHead>Quota</TableHead> : null}
                           <TableHead>Notes</TableHead>
                           <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
@@ -440,11 +557,62 @@ export function ProvidersPage() {
                             <TableCell className="text-muted-foreground">
                               {key.lastUsed ? formatDate(key.lastUsed) : "No usage recorded yet"}
                             </TableCell>
+                            {showTavilyQuota ? (
+                              <TableCell className="min-w-44 text-xs text-muted-foreground">
+                                {usageByIndex[index] ? (
+                                  <div className="space-y-1">
+                                    <p>
+                                      Key{" "}
+                                      {formatUsageLine(
+                                        usageByIndex[index].usage.key,
+                                        "usage",
+                                        "limit",
+                                        "remaining",
+                                      ) ?? "-"}
+                                    </p>
+                                    <p>
+                                      Account{" "}
+                                      {formatUsageLine(
+                                        usageByIndex[index].usage.account,
+                                        "plan_usage",
+                                        "plan_limit",
+                                        "plan_remaining",
+                                      ) ?? "-"}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  "Not checked"
+                                )}
+                              </TableCell>
+                            ) : null}
                             <TableCell className="max-w-[24rem] whitespace-normal text-muted-foreground">
                               {providerKeyDescription(key)}
                             </TableCell>
                             <TableCell>
                               <div className="flex justify-end gap-2">
+                                {showTavilyQuota ? (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={checkingUsageIndex === index}
+                                    onClick={() => handleCheckTavilyUsage(index)}
+                                  >
+                                    <Gauge className="h-4 w-4" />
+                                    {checkingUsageIndex === index ? "Checking" : "Usage"}
+                                  </Button>
+                                ) : null}
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={
+                                    key.status === "revoked" ||
+                                    checkingKeyIndex === index
+                                  }
+                                  onClick={() => handleCheckKey(index)}
+                                >
+                                  <Activity className="h-4 w-4" />
+                                  {checkingKeyIndex === index ? "Checking" : "Check"}
+                                </Button>
                                 <Button
                                   variant="outline"
                                   size="sm"

@@ -12,8 +12,10 @@ import {
 } from "./providers/perplexity.js";
 import {
   CRAWL_TOOL_DEFINITION as TAVILY_CRAWL_TOOL_DEFINITION,
+  USAGE_TOOL_DEFINITION as TAVILY_USAGE_TOOL_DEFINITION,
   createTavilyCrawlHandler,
   createTavilyHandler,
+  createTavilyUsageHandler,
 } from "./providers/tavily.js";
 
 function objectSchema(shape: Record<string, z.ZodTypeAny>) {
@@ -96,6 +98,14 @@ describe("provider tool definitions", () => {
         timeout: 151,
       }).success,
     ).toBe(false);
+  });
+
+  it("accepts optional Tavily usage project IDs", () => {
+    const schema = objectSchema(TAVILY_USAGE_TOOL_DEFINITION.inputSchema);
+
+    expect(schema.safeParse({}).success).toBe(true);
+    expect(schema.safeParse({ project_id: "project-123" }).success).toBe(true);
+    expect(schema.safeParse({ project_id: "" }).success).toBe(false);
   });
 });
 
@@ -193,6 +203,78 @@ describe("createTavilyCrawlHandler", () => {
       base_url: "https://docs.tavily.com",
       response_time: "2.1",
       results: [{ url: "https://docs.tavily.com/docs" }],
+    });
+  });
+});
+
+describe("createTavilyUsageHandler", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("gets Tavily usage and calculates remaining quota", async () => {
+    const handler = createTavilyUsageHandler({
+      baseUrl: "https://api.tavily.com",
+      keyPool: new KeyPool({
+        providerName: "tavily",
+        keys: ["tvly-test"],
+      }),
+      timeoutMs: 1_000,
+      maxAttempts: 1,
+      onKeyRevoked: vi.fn(),
+    });
+
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(url).toBe("https://api.tavily.com/usage");
+      expect(init?.method).toBe("GET");
+      expect(init?.headers).toMatchObject({
+        Authorization: "Bearer tvly-test",
+        "X-Project-ID": "project-123",
+      });
+
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            key: {
+              usage: 25,
+              limit: 100,
+            },
+            account: {
+              plan_usage: 300,
+              plan_limit: 1_000,
+              paygo_usage: 5,
+              paygo_limit: 50,
+            },
+          }),
+      };
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await handler({
+      project_id: "project-123",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.structuredContent).toMatchObject({
+      provider: "tavily_usage",
+      project_id: "project-123",
+      key: {
+        usage: 25,
+        limit: 100,
+        remaining: 75,
+      },
+      account: {
+        plan_usage: 300,
+        plan_limit: 1_000,
+        plan_remaining: 700,
+        paygo_usage: 5,
+        paygo_limit: 50,
+        paygo_remaining: 45,
+      },
     });
   });
 });

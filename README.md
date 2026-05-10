@@ -16,7 +16,7 @@ apps/
 
 ## Features
 
-- **6 MCP tools**: Tavily search/crawl, Exa/Perplexity search + Jina/Cloudflare fetch
+- **7 MCP tools**: Tavily search/crawl/usage, Exa/Perplexity search + Jina/Cloudflare fetch
 - **Automatic key rotation** with round-robin or random strategy
 - **Key health tracking**: automatic disable, recovery, and revocation
 - **PAT authentication** for MCP tool calls (Bearer token)
@@ -171,6 +171,7 @@ Passwords are never stored in plaintext after the first launch. Legacy SHA-256 h
 |------|----------|-------------|
 | `search_tavily` | [Tavily](https://tavily.com/) | General-purpose web search with AI answer generation |
 | `crawl_tavily` | [Tavily Crawl](https://docs.tavily.com/documentation/api-reference/endpoint/crawl) | Website crawl with built-in extraction and path/domain controls |
+| `check_tavily_usage` | [Tavily Usage](https://docs.tavily.com/documentation/api-reference/endpoint/usage) | Tavily API key/account credit usage and remaining quota |
 | `search_exa` | [Exa](https://exa.ai/) | AI-native search with neural, keyword, and hybrid modes |
 | `search_perplexity` | [Perplexity](https://perplexity.ai/) | Lightweight structured web search |
 | `fetch_jina_markdown` | [Jina Reader](https://jina.ai/reader/) | Default lightweight Markdown fetch for most pages |
@@ -221,10 +222,11 @@ All `/api/admin/*` routes (except login/logout) require an authenticated admin s
 | `GET` | `/api/admin/dashboard` | Dashboard summary (provider key counts, PAT count) |
 | `GET` | `/api/admin/providers` | List all providers with key health stats |
 | `GET` | `/api/admin/providers/:name` | Provider detail with per-key health |
-| `POST` | `/api/admin/providers/:name/keys` | Add a key (`{api_key: "..."}`) |
+| `POST` | `/api/admin/providers/:name/keys` | Add key(s) (`{api_key: "..."}` or `{api_keys: ["..."]}`; Cloudflare uses account/token objects) |
 | `PUT` | `/api/admin/providers/:name/keys/:index` | Update key (`{disabled: true/false}`) |
 | `DELETE` | `/api/admin/providers/:name/keys/:index` | Remove a key |
-| `POST` | `/api/admin/providers/:name/keys/:index/check` | Get key health status |
+| `POST` | `/api/admin/providers/tavily/keys/:index/usage` | Check Tavily usage/quota for one key (`{project_id?}`) |
+| `POST` | `/api/admin/providers/:name/keys/:index/check` | Run upstream key liveness check |
 | `GET` | `/api/admin/pats` | List PATs (masked) |
 | `POST` | `/api/admin/pats` | Create PAT (`{name, note?, expires_at?}`) |
 | `GET` | `/api/admin/pats/:name` | PAT detail |

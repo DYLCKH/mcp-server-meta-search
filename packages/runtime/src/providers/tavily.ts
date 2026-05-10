@@ -11,6 +11,7 @@ import { callWithKeyRotation } from "../http-client.js";
 
 export const TOOL_NAME = "search_tavily";
 export const CRAWL_TOOL_NAME = "crawl_tavily";
+export const USAGE_TOOL_NAME = "check_tavily_usage";
 
 export const TOOL_DEFINITION = {
   title: "Tavily Search (Key Rotation)",
@@ -113,6 +114,23 @@ export const CRAWL_TOOL_DEFINITION = {
   },
 } as const;
 
+export const USAGE_TOOL_DEFINITION = {
+  title: "Tavily Usage (Key Rotation)",
+  description:
+    "Check Tavily API credit usage and limits for the selected API key/account.",
+  inputSchema: {
+    project_id: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("Optional Tavily project ID to scope the usage lookup."),
+  },
+  annotations: {
+    readOnlyHint: true,
+  },
+} as const;
+
 export interface TavilyHandlerDeps {
   baseUrl: string;
   keyPool: KeyPool;
@@ -129,6 +147,73 @@ function normalizeResponseTime(responseTime: unknown): string | number | null {
   return typeof responseTime === "string" || typeof responseTime === "number"
     ? responseTime
     : null;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function remainingCredits(
+  usageSource: Record<string, unknown> | null,
+  usageField: string,
+  limitField: string,
+): number | null {
+  if (!usageSource) return null;
+
+  const usage = toFiniteNumber(usageSource[usageField]);
+  const limit = toFiniteNumber(usageSource[limitField]);
+  return usage === null || limit === null ? null : limit - usage;
+}
+
+export function normalizeTavilyUsageResponse(
+  data: unknown,
+  attempts: number,
+  projectId?: unknown,
+) {
+  const response = asRecord(data) ?? {};
+  const key = asRecord(response.key);
+  const account = asRecord(response.account);
+
+  const normalizedKey = key
+    ? {
+        ...key,
+        remaining: remainingCredits(key, "usage", "limit"),
+      }
+    : null;
+  const normalizedAccount = account
+    ? {
+        ...account,
+        plan_remaining: remainingCredits(account, "plan_usage", "plan_limit"),
+        paygo_remaining: remainingCredits(
+          account,
+          "paygo_usage",
+          "paygo_limit",
+        ),
+      }
+    : null;
+
+  return {
+    provider: "tavily_usage",
+    attempts,
+    project_id: typeof projectId === "string" ? projectId : null,
+    key: normalizedKey,
+    account: normalizedAccount,
+  };
 }
 
 export function createTavilyHandler(deps: TavilyHandlerDeps) {
@@ -246,6 +331,46 @@ export function createTavilyCrawlHandler(deps: TavilyHandlerDeps) {
       results: normalizeResults(response.results),
       failed_results: normalizeResults(response.failed_results),
     };
+
+    return {
+      content: [
+        { type: "text" as const, text: JSON.stringify(normalized, null, 2) },
+      ],
+      structuredContent: normalized,
+    };
+  };
+}
+
+export function createTavilyUsageHandler(deps: TavilyHandlerDeps) {
+  return async function checkTavilyUsage(input: Record<string, unknown>) {
+    const projectId =
+      typeof input.project_id === "string" && input.project_id.trim()
+        ? input.project_id.trim()
+        : undefined;
+
+    const { data, attempts } = await callWithKeyRotation({
+      providerName: "tavily",
+      keyPool: deps.keyPool,
+      timeoutMs: deps.timeoutMs,
+      configuredMaxAttempts: deps.maxAttempts,
+      onKeyRevoked: deps.onKeyRevoked,
+      buildRequest: (apiKey) => ({
+        url: `${deps.baseUrl}/usage`,
+        init: {
+          method: "GET",
+          headers: compactObject({
+            Authorization: `Bearer ${apiKey}`,
+            "X-Project-ID": projectId,
+          }) as Record<string, string>,
+        },
+      }),
+    });
+
+    const normalized = normalizeTavilyUsageResponse(
+      data,
+      attempts,
+      projectId,
+    );
 
     return {
       content: [

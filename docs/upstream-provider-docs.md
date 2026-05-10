@@ -19,6 +19,11 @@ before changing MCP tool parameters or upstream payload handling.
   `max_breadth` up to 500, `timeout` up to 150 seconds, and uses the same
   Tavily API key pool as search.
 
+- Tavily Usage API:
+  [https://docs.tavily.com/documentation/api-reference/endpoint/usage](https://docs.tavily.com/documentation/api-reference/endpoint/usage)
+  Relevant notes: usage is fetched with `GET /usage` and the same bearer token
+  as search/crawl. `X-Project-ID` can be supplied to scope the lookup.
+
 - Exa Search API:
   [https://docs.exa.ai/reference/search](https://docs.exa.ai/reference/search)
   Relevant notes:
@@ -45,3 +50,8 @@ before changing MCP tool parameters or upstream payload handling.
   [https://developers.cloudflare.com/api/resources/browser_rendering/subresources/markdown/methods/create/](https://developers.cloudflare.com/api/resources/browser_rendering/subresources/markdown/methods/create/)
   Relevant note: `waitForSelector.timeout` currently supports values up to
   `120000` ms.
+
+- Cloudflare API Token Verify:
+  [https://developers.cloudflare.com/api/resources/user/subresources/tokens/methods/verify/](https://developers.cloudflare.com/api/resources/user/subresources/tokens/methods/verify/)
+  Relevant note: admin key liveness checks use token verification to avoid
+  spending browser-rendering quota.

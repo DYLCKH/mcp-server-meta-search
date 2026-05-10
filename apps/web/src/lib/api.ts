@@ -32,6 +32,49 @@ export interface ProviderDetail {
   keys: ProviderKey[];
 }
 
+export type ProviderKeyInput = string | { account_id: string; api_token: string };
+
+export interface TavilyUsageSection {
+  [key: string]: unknown;
+  usage?: number | string | null;
+  limit?: number | string | null;
+  remaining?: number | string | null;
+  plan_usage?: number | string | null;
+  plan_limit?: number | string | null;
+  plan_remaining?: number | string | null;
+  paygo_usage?: number | string | null;
+  paygo_limit?: number | string | null;
+  paygo_remaining?: number | string | null;
+}
+
+export interface TavilyUsagePayload {
+  provider: "tavily_usage";
+  attempts: number;
+  project_id: string | null;
+  key: TavilyUsageSection | null;
+  account: TavilyUsageSection | null;
+}
+
+export interface TavilyUsageCheckResponse {
+  provider: "tavily";
+  index: number;
+  hint: string | Record<string, string>;
+  usage: TavilyUsagePayload;
+}
+
+export interface ProviderKeyCheckResponse {
+  provider: string;
+  index: number;
+  ok: boolean;
+  checked_at: string;
+  upstream_status: number;
+  health: {
+    status: string;
+    disableCount: number;
+    disabledAt: number | null;
+  };
+}
+
 export interface DashboardData {
   providers: ProviderSummary[];
   patCount: number;
@@ -340,10 +383,14 @@ export const api = {
     } satisfies ProviderDetail;
   },
 
-  addKey(name: string, key: string | { account_id: string; api_token: string }) {
-    return request<{ ok: true }>(`/providers/${encodeURIComponent(name)}/keys`, {
+  addKey(name: string, key: ProviderKeyInput) {
+    return api.addKeys(name, [key]);
+  },
+
+  addKeys(name: string, keys: ProviderKeyInput[]) {
+    return request<{ ok: true; added?: number }>(`/providers/${encodeURIComponent(name)}/keys`, {
       method: "POST",
-      body: JSON.stringify({ api_key: key }),
+      body: JSON.stringify({ api_keys: keys }),
     });
   },
 
@@ -365,6 +412,25 @@ export const api = {
       `/providers/${encodeURIComponent(name)}/keys/${index}`,
       {
         method: "DELETE",
+      },
+    );
+  },
+
+  checkTavilyUsage(index: number, projectId?: string) {
+    return request<TavilyUsageCheckResponse>(
+      `/providers/tavily/keys/${index}/usage`,
+      {
+        method: "POST",
+        body: JSON.stringify(projectId ? { project_id: projectId } : {}),
+      },
+    );
+  },
+
+  checkKey(name: string, index: number) {
+    return request<ProviderKeyCheckResponse>(
+      `/providers/${encodeURIComponent(name)}/keys/${index}/check`,
+      {
+        method: "POST",
       },
     );
   },
