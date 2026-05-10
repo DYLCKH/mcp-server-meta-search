@@ -30,11 +30,12 @@ import type {
   AuditLogFilters as DbAuditLogFilters,
 } from "./db/index.js";
 import { createAdminRouter } from "./admin/router.js";
+import { requireAdminAuth } from "./admin/auth.js";
 import type { AdminDeps, DbHandle } from "./admin/types.js";
 import { bootstrapAdminPassword } from "./admin/bootstrap.js";
 import { resolveAppPath, resolveStaticAssetPath } from "./path-utils.js";
 import { buildRuntimeState } from "./runtime-state.js";
-import { embeddedAssets } from "./static-assets.js";
+import { getEmbeddedAsset } from "./static-assets.js";
 
 // ---------------------------------------------------------------------------
 // Proxy Support
@@ -108,9 +109,8 @@ const MIME_TYPES: Record<string, string> = {
   ".ico": "image/x-icon",
 };
 
-function serveEmbeddedAsset(assetPath: string): Response | null {
-  if (!embeddedAssets) return null;
-  const asset = embeddedAssets[assetPath];
+async function serveEmbeddedAsset(assetPath: string): Promise<Response | null> {
+  const asset = await getEmbeddedAsset(assetPath);
   if (!asset) return null;
   return new Response(asset.data, {
     headers: { "Content-Type": asset.contentType },
@@ -158,7 +158,11 @@ function printStartupSummary(rt: RuntimeState): void {
   if (perf) {
     const pc = config.performance;
     const parts: string[] = [];
-    if (pc.cache.enabled) parts.push(`cache(max=${pc.cache.maxSize},ttl=${pc.cache.defaultTtlMs}ms)`);
+    if (pc.cache.enabled) {
+      parts.push(
+        `cache(max=${pc.cache.maxSize},bytes=${formatBytes(pc.cache.maxBytes)},entry=${formatBytes(pc.cache.maxEntryBytes)},ttl=${pc.cache.defaultTtlMs}ms)`,
+      );
+    }
     if (pc.circuitBreaker.enabled) parts.push(`cb(threshold=${pc.circuitBreaker.failureThreshold})`);
     if (pc.singleFlight.enabled) parts.push("single-flight");
     parts.push(`concurrency(${pc.concurrency.maxConcurrency})`);
@@ -166,6 +170,16 @@ function printStartupSummary(rt: RuntimeState): void {
       process.stderr.write(`[meta-search]   Perf: ${parts.join(", ")}\n`);
     }
   }
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024) {
+    return `${Math.round(bytes / 1024 / 1024)}MiB`;
+  }
+  if (bytes >= 1024) {
+    return `${Math.round(bytes / 1024)}KiB`;
+  }
+  return `${bytes}B`;
 }
 
 // ---------------------------------------------------------------------------
@@ -240,6 +254,7 @@ async function main(): Promise<void> {
     return c.text("Not ready", 503);
   });
 
+  app.use("/metrics", requireAdminAuth(adminDeps));
   app.get("/metrics", (c) => {
     const metrics = runtimeStateRef.current.perf?.metrics;
     if (!metrics) {
@@ -293,7 +308,7 @@ async function main(): Promise<void> {
     const subPath = c.req.path.slice("/app".length) || "/";
 
     if (subPath !== "/" && extname(subPath)) {
-      const embedded = serveEmbeddedAsset(subPath);
+      const embedded = await serveEmbeddedAsset(subPath);
       if (embedded) return embedded;
 
       const filePath = resolveStaticAssetPath(webRoot, subPath);
@@ -308,7 +323,7 @@ async function main(): Promise<void> {
     }
 
     // SPA fallback: serve index.html
-    const embedded = serveEmbeddedAsset("/index.html");
+    const embedded = await serveEmbeddedAsset("/index.html");
     if (embedded) return embedded;
 
     const indexPath = resolveStaticAssetPath(webRoot, "/index.html");

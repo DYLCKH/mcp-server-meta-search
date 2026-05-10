@@ -35,6 +35,11 @@ describe("resolveConfig", () => {
       expect(config.key_rotation_strategy).toBe("round_robin");
       expect(config.request_timeout_ms).toBe(30000);
       expect(config.tavily?.api_keys).toEqual(["file-key"]);
+      expect(config.performance.cache.maxSize).toBe(128);
+      expect(config.performance.cache.maxBytes).toBe(8 * 1024 * 1024);
+      expect(config.performance.cache.maxEntryBytes).toBe(256 * 1024);
+      expect(config.performance.concurrency.maxConcurrency).toBe(8);
+      expect(config.performance.concurrency.maxQueueSize).toBe(64);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }

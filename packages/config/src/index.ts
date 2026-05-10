@@ -90,6 +90,8 @@ const PerformanceSchema = z.object({
   cache: z.object({
     enabled: z.boolean().optional(),
     maxSize: z.number().optional(),
+    maxBytes: z.number().optional(),
+    maxEntryBytes: z.number().optional(),
     defaultTtlMs: z.number().optional(),
   }).optional(),
   concurrency: z.object({
@@ -140,6 +142,8 @@ export interface ResolvedPerformanceConfig {
   cache: {
     enabled: boolean;
     maxSize: number;
+    maxBytes: number;
+    maxEntryBytes: number;
     defaultTtlMs: number;
   };
   concurrency: {
@@ -192,7 +196,13 @@ const DEFAULTS = {
   max_disable_before_revoke: 3,
   invalid_keys_file: "invalid-keys.json",
   performance: {
-    cache: { enabled: true, maxSize: 512, defaultTtlMs: 60_000 },
+    cache: {
+      enabled: true,
+      maxSize: 128,
+      maxBytes: 8 * 1024 * 1024,
+      maxEntryBytes: 256 * 1024,
+      defaultTtlMs: 60_000,
+    },
     concurrency: { maxConcurrency: 8, maxQueueSize: 64, queueTimeoutMs: 30_000 },
     circuitBreaker: { enabled: true, failureThreshold: 5, resetTimeoutMs: 30_000 },
     singleFlight: { enabled: true },
@@ -333,6 +343,8 @@ function resolvePerformance(perf?: PerformanceConfig): ResolvedPerformanceConfig
     cache: {
       enabled: perf?.cache?.enabled ?? d.cache.enabled,
       maxSize: perf?.cache?.maxSize ?? d.cache.maxSize,
+      maxBytes: perf?.cache?.maxBytes ?? d.cache.maxBytes,
+      maxEntryBytes: perf?.cache?.maxEntryBytes ?? d.cache.maxEntryBytes,
       defaultTtlMs: perf?.cache?.defaultTtlMs ?? d.cache.defaultTtlMs,
     },
     concurrency: {

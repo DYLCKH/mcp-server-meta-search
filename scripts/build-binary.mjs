@@ -60,6 +60,7 @@ const targetFlag = target ? `--target=${target}` : "";
 const compileCmd = [
   "bun build",
   "--compile",
+  "--compile-exec-argv=--smol",
   targetFlag,
   `--outfile ${outPath}`,
   ENTRY,

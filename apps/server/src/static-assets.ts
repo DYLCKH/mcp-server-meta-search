@@ -3,15 +3,24 @@ export interface EmbeddedAsset {
   data: Uint8Array;
 }
 
-let assets: Record<string, EmbeddedAsset> | null = null;
+let assetsPromise: Promise<Record<string, EmbeddedAsset> | null> | null = null;
 
-try {
-  const mod = await import("./embedded-assets.generated.js");
-  if (mod.EMBEDDED_ASSETS && Object.keys(mod.EMBEDDED_ASSETS).length > 0) {
-    assets = mod.EMBEDDED_ASSETS;
+async function loadEmbeddedAssets(): Promise<Record<string, EmbeddedAsset> | null> {
+  try {
+    const mod = await import("./embedded-assets.generated.js");
+    if (mod.EMBEDDED_ASSETS && Object.keys(mod.EMBEDDED_ASSETS).length > 0) {
+      return mod.EMBEDDED_ASSETS;
+    }
+  } catch {
+    // Not available — running in dev mode without embedded assets
   }
-} catch {
-  // Not available — running in dev mode without embedded assets
+  return null;
 }
 
-export const embeddedAssets: Record<string, EmbeddedAsset> | null = assets;
+export async function getEmbeddedAsset(
+  assetPath: string,
+): Promise<EmbeddedAsset | null> {
+  assetsPromise ??= loadEmbeddedAssets();
+  const assets = await assetsPromise;
+  return assets?.[assetPath] ?? null;
+}

@@ -115,7 +115,9 @@ The server uses **JSONC** (`config.jsonc`) as its primary configuration format. 
 | `admin.session_ttl_ms` | `86400000` | Session TTL (24 hours) |
 | `pats` | `[]` | Personal access tokens array |
 | `performance.cache.enabled` | `true` | Enable response caching |
-| `performance.cache.maxSize` | `512` | Max cached entries |
+| `performance.cache.maxSize` | `128` | Max cached entries |
+| `performance.cache.maxBytes` | `8388608` | Approximate total in-memory cache budget |
+| `performance.cache.maxEntryBytes` | `262144` | Skip caching entries above this size |
 | `performance.cache.defaultTtlMs` | `60000` | Cache TTL (60 seconds) |
 | `performance.concurrency.maxConcurrency` | `8` | Max parallel provider requests |
 | `performance.concurrency.maxQueueSize` | `64` | Max queued requests |
@@ -272,6 +274,9 @@ bun run build:binary --target bun-linux-x64
 
 The binary reads the same `CONFIG_PATH`, `LOGS_DB_PATH`, `PORT`, and `HOST`
 environment variables as the source-mode server.
+
+For memory-constrained hosts, prefer the single binary. On a 128 MB instance,
+keep cache byte limits enabled unless you have measured spare headroom.
 
 ### Reverse Proxy
 

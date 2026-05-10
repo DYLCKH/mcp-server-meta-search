@@ -114,6 +114,8 @@ export function createPerfInstances(perfConfig: ResolvedPerformanceConfig): Perf
   return {
     cache: new ResultCache({
       maxSize: perfConfig.cache.maxSize,
+      maxBytes: perfConfig.cache.maxBytes,
+      maxEntryBytes: perfConfig.cache.maxEntryBytes,
       defaultTtlMs: perfConfig.cache.defaultTtlMs,
     }),
     limiter: new ConcurrencyLimiter("global", {

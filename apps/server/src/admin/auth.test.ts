@@ -116,6 +116,22 @@ describe("admin auth sessions", () => {
     expect(await response.json()).toEqual({ ok: true });
   });
 
+  it("sets the session cookie for the whole admin surface", async () => {
+    const response = await createProtectedApp(createDeps(createConfigPath())).request(
+      "http://localhost/auth/login",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ password: PASSWORD }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("set-cookie")).toContain("Path=/");
+  });
+
   it("rejects cookies after the configured TTL elapses", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-19T02:17:00.000Z"));

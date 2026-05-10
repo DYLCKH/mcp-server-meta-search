@@ -91,6 +91,7 @@ jobs:
       - run: |
           mkdir -p dist-bin
           bun build --compile --target=${{ matrix.target }} \
+            --compile-exec-argv=--smol \
             --outfile dist-bin/${{ matrix.artifact }} \
             apps/server/src/index.ts
 

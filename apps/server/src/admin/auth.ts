@@ -17,6 +17,7 @@ interface Session {
 }
 
 const DEFAULT_SESSION_TTL_MS = 86_400_000;
+const SESSION_COOKIE_PATH = "/";
 
 // ---------------------------------------------------------------------------
 // Login rate limiting (per remote address)
@@ -136,13 +137,13 @@ function setSessionCookie(c: Context, deps: AdminDeps, session: Session): void {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "Strict",
-    path: "/api/admin",
+    path: SESSION_COOKIE_PATH,
     maxAge: Math.floor(getSessionTtlMs(deps) / 1000),
   });
 }
 
 function clearSessionCookie(c: Context): void {
-  deleteCookie(c, "admin_session", { path: "/api/admin" });
+  deleteCookie(c, "admin_session", { path: SESSION_COOKIE_PATH });
 }
 
 /**

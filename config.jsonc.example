@@ -122,7 +122,9 @@
     // Response cache: caches successful GET-like results in memory
     "cache": {
       "enabled": true,
-      "maxSize": 512,          // Max cached entries
+      "maxSize": 128,          // Max cached entries
+      "maxBytes": 8388608,     // Max cache memory, roughly 8 MiB
+      "maxEntryBytes": 262144, // Skip caching entries above 256 KiB
       "defaultTtlMs": 60000    // Cache TTL (60 seconds)
     },
 

@@ -40,6 +40,7 @@ describe("ResultCache", () => {
 
     expect(cache.get("stale")).toEqual({ hit: false });
     expect(cache.stats.size).toBe(0);
+    expect(cache.stats.bytes).toBe(0);
     expect(cache.stats.misses).toBe(1);
   });
 
@@ -53,5 +54,37 @@ describe("ResultCache", () => {
 
     expect(cache.get("never")).toEqual({ hit: false });
     expect(cache.stats.size).toBe(0);
+  });
+
+  it("skips entries above the per-entry byte limit", () => {
+    const cache = new ResultCache({
+      maxSize: 2,
+      maxEntryBytes: 4,
+      defaultTtlMs: 1_000,
+    });
+
+    cache.set("large", "12345");
+
+    expect(cache.get("large")).toEqual({ hit: false });
+    expect(cache.stats.size).toBe(0);
+    expect(cache.stats.bytes).toBe(0);
+  });
+
+  it("evicts least recently used entries to stay under the byte limit", () => {
+    const cache = new ResultCache({
+      maxSize: 10,
+      maxBytes: 8,
+      defaultTtlMs: 1_000,
+    });
+
+    cache.set("a", "1234");
+    cache.set("b", "5678");
+    cache.set("c", "abcd");
+
+    expect(cache.get("a")).toEqual({ hit: false });
+    expect(cache.get("b")).toEqual({ data: "5678", hit: true });
+    expect(cache.get("c")).toEqual({ data: "abcd", hit: true });
+    expect(cache.stats.bytes).toBe(8);
+    expect(cache.stats.evictions).toBe(1);
   });
 });
